@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from adapters.gemini_chat import gemini_chat
+from adapters.gemini_models import GeminiResult
 from services.supabase_client import supabase
 
 logger = logging.getLogger("boy.whatsapp.mensajes")
@@ -96,12 +97,18 @@ class MensajesAppService:
             club_id=club_id,
         )
 
-        # Si Gemini fallo, get_respuesta retorna string de error
-        if isinstance(respuesta, str):
+        # gemini_chat.get_respuesta retorna GeminiResult (nunca exception)
+        if isinstance(respuesta, GeminiResult):
+            if respuesta.success:
+                respuesta_texto = respuesta.data or ""
+            else:
+                # Error - usar mensaje amigable
+                respuesta_texto = respuesta.message or "Lo siento, no pude procesar tu mensaje. Intenta de nuevo."
+        elif isinstance(respuesta, str):
+            # Fallback por si el adaptador retorna string directo
             respuesta_texto = respuesta
         else:
-            # GeminiResult - no deberia pasar aqui con el adaptador actual
-            respuesta_texto = str(respuesta)
+            respuesta_texto = "Error inesperado"
 
         logger.info(f"[MSG] Respuesta: {respuesta_texto[:80]}...")
 
