@@ -1,4 +1,5 @@
 import logging
+import xml.sax.saxutils as saxutils
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from application.whatsapp_app_service import WhatsAppAppService
@@ -25,6 +26,8 @@ async def webhook_whatsapp(request: Request):
         media_url      = form.get("MediaUrl0", "")
         media_type     = form.get("MediaContentType0", "")
 
+        logger.info(f"[WEBHOOK] De: {numero_usuario} | Para: {numero_club} | Media: {num_media}")
+
         # Si envió una imagen, verificar si es comprobante de pago
         if num_media > 0 and media_url and "image" in media_type:
             respuesta = _procesar_imagen_pago(
@@ -39,9 +42,12 @@ async def webhook_whatsapp(request: Request):
         logger.error(f"[WEBHOOK] Error inesperado: {e}", exc_info=True)
         respuesta = "Ocurrió un error inesperado. Por favor intenta de nuevo."
 
+    # Escape XML para evitar problemas con caracteres especiales
+    respuesta_safe = saxutils.escape(str(respuesta))
+    
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Message>{respuesta}</Message>
+    <Message>{respuesta_safe}</Message>
 </Response>"""
 
     return PlainTextResponse(content=twiml, media_type="application/xml")

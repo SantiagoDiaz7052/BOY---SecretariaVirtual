@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from adapters.gemini_client import gemini_client
 from adapters.gemini_models import GeminiResult, VisionAnalysisResult
+from adapters.gemini_chat import _circuit_breaker
 
 load_dotenv()
 
@@ -104,6 +105,14 @@ Responde SOLO con el formato pedido, sin explicaciones adicionales."""
         Este metodo NO valida montos, NO verifica obligaciones.
         Solo extrae datos de la imagen.
         """
+        # Verificar circuit breaker
+        if not _circuit_breaker.is_available():
+            logger.warning("[VISION] Circuit breaker OPEN - Usando fallback")
+            return GeminiResult.fail(
+                error_type="CIRCUIT_BREAKER_OPEN",
+                message="Servicio temporalmente no disponible. El pago sera verificado manualmente.",
+            )
+        
         # 1. Descargar imagen
         descarga = self._descargar_imagen(imagen_url)
         if not descarga.success:
@@ -135,7 +144,11 @@ Responde SOLO con el formato pedido, sin explicaciones adicionales."""
             fallback_model="gemini-2.5-flash",
         )
         
-        if not resultado.success:
+        # Actualizar circuit breaker segun resultado
+        if resultado.success:
+            _circuit_breaker.record_success()
+        else:
+            _circuit_breaker.record_failure()
             return resultado
         
         # 5. Parsear respuesta a DTO

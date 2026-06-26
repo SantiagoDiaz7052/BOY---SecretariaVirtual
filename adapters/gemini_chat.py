@@ -1,4 +1,6 @@
 import logging
+import time
+import threading
 from typing import Optional
 from google.genai import types
 
@@ -9,6 +11,80 @@ from adapters.gemini_inscription import registrar_inscripcion
 from services.inscripciones import consultar_deportista
 
 logger = logging.getLogger("boy.gemini.chat")
+
+# ============================================================
+# CIRCUIT BREAKER - Proteccion contra fallos de Gemini
+# ============================================================
+class CircuitBreaker:
+    """Circuit Breaker para proteger contra fallos de Gemini.
+    
+    Estados:
+    - CLOSED: Funciona normal, permite requests
+    - OPEN: Gemini esta fallando, bloquea requests
+    - HALF_OPEN: Probando si Gemini se recupero
+    """
+    
+    def __init__(self, failure_threshold: int = 3, 
+                 recovery_timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = 0
+        self.state = "CLOSED"
+        self._lock = threading.Lock()
+    
+    def record_failure(self) -> None:
+        """Registra un fallo."""
+        with self._lock:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            
+            if self.failure_count >= self.failure_threshold:
+                self.state = "OPEN"
+                logger.warning(
+                    f"[CIRCUIT_BREAKER] Circuito ABIERTO. "
+                    f"Fallos: {self.failure_count}. "
+                    f"Gemini no disponible por {self.recovery_timeout}s"
+                )
+    
+    def record_success(self) -> None:
+        """Registra un exito."""
+        with self._lock:
+            self.failure_count = 0
+            self.state = "CLOSED"
+    
+    def is_available(self) -> bool:
+        """Verifica si esta disponible para requests."""
+        with self._lock:
+            if self.state == "CLOSED":
+                return True
+            
+            if self.state == "OPEN":
+                # Verificar si ya paso el tiempo de recuperacion
+                elapsed = time.time() - self.last_failure_time
+                if elapsed >= self.recovery_timeout:
+                    self.state = "HALF_OPEN"
+                    logger.info("[CIRCUIT_BREAKER] Circuito HALF_OPEN - Probando Gemini")
+                    return True
+                return False
+            
+            if self.state == "HALF_OPEN":
+                return True
+            
+            return False
+
+# Instancia global del circuit breaker
+_circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60)
+
+
+def gemini_fallback_response() -> str:
+    """Retorna una respuesta fallback cuando Gemini esta caido."""
+    return (
+        "Estoy teniendo un problema temporal con el servicio. "
+        "Por favor, intenta de nuevo en unos minutos. "
+        "Si el problema persiste, escribe *10* para hablar con Ivonn."
+    )
+
 
 PROMPT_BASE = """
 Eres una secretaria virtual eficiente de un club de patinaje.
@@ -112,6 +188,7 @@ class GeminiChatAdapter:
     - Recibe historial y mensaje
     - Retorna respuesta de texto o indica funcion a llamar
     - Nunca lanza excepciones
+    - Circuit breaker para proteccion contra fallos
     """
     
     def __init__(self):
@@ -158,6 +235,14 @@ class GeminiChatAdapter:
         Returns:
             GeminiResult con la respuesta de texto
         """
+        # Verificar circuit breaker
+        if not _circuit_breaker.is_available():
+            logger.warning("[CHAT] Circuit breaker OPEN - Usando fallback")
+            return GeminiResult.ok(
+                data=gemini_fallback_response(),
+                retries_used=0,
+            )
+        
         # Construir contenido
         contents = []
         for m in historial:
@@ -189,8 +274,16 @@ class GeminiChatAdapter:
             fallback_model="gemini-2.5-flash",
         )
         
-        if not resultado.success:
-            return resultado
+        # Actualizar circuit breaker segun resultado
+        if resultado.success:
+            _circuit_breaker.record_success()
+        else:
+            _circuit_breaker.record_failure()
+            # Retornar respuesta fallback en lugar de error
+            return GeminiResult.ok(
+                data=gemini_fallback_response(),
+                retries_used=resultado.retries_used,
+            )
         
         # Verificar si Gemini quiere llamar una funcion
         try:
@@ -218,9 +311,8 @@ class GeminiChatAdapter:
             
         except (IndexError, AttributeError) as e:
             logger.error(f"[CHAT] Error procesando respuesta: {e}")
-            return GeminiResult.fail(
-                error_type="RESPONSE_PARSE_ERROR",
-                message="Error al procesar respuesta de Gemini",
+            return GeminiResult.ok(
+                data=gemini_fallback_response(),
                 retries_used=resultado.retries_used,
             )
 
