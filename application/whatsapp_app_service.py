@@ -120,8 +120,8 @@ class WhatsAppAppService:
             proceso["id"], imagen_url
         )
 
-        # 4. Analizar con Gemini Vision
-        analisis = gemini_vision.analizar_comprobante(imagen_url, monto_esperado)
+        # 4. Analizar con Gemini Vision (el adaptador SOLO extrae datos)
+        analisis = gemini_vision.analizar_imagen(imagen_url, monto_sugerido=monto_esperado)
 
         if not analisis.success:
             # Gemini fallo - proceso se mantiene activo para reintentar
@@ -137,9 +137,9 @@ class WhatsAppAppService:
                 "error_type": analisis.error_type,
             }
 
-        # 5. Verificar si es comprobante valido
+        # 5. Logica de negocio: verificar si es comprobante valido
         analysis = analisis.data
-        if not analysis.es_comprobante:
+        if not analysis.es_valido:
             self.proceso_service.registrar_analisis_gemini(
                 proceso["id"], exito=True,
                 analisis=analysis.to_dict()
@@ -152,7 +152,7 @@ class WhatsAppAppService:
                 "proceso_id": proceso["id"],
             }
 
-        # 6. Verificar monto
+        # 6. Logica de negocio: verificar monto con tolerancia
         config = self.config_service.obtener_por_club(club_id)
         tolerancia = config.tolerancia_monto if config else 5000
         
@@ -190,15 +190,15 @@ class WhatsAppAppService:
                 .execute().data["id"],
             "monto": monto_esperado,
             "monto_detectado": analysis.monto_detectado,
-            "referencia_detectada": analysis.referencia,
-            "fecha_detectada": analysis.fecha,
-            "tipo_pago": analysis.plataforma or "desconocido",
+            "referencia_detectada": analysis.referencia_detectada,
+            "fecha_detectada": analysis.fecha_detectada,
+            "tipo_pago": analysis.plataforma_detectada or "desconocido",
             "tipo": "mensualidad",
             "mes_anio": mes_anio,
             "imagen_url": imagen_url,
             "estado": "pendiente_verificacion",
             "wompi_data": {
-                "analisis_gemini": analysis.texto_completo,
+                "analisis_gemini": analysis.metadata,
                 "proceso_pago_id": proceso["id"],
             }
         }).execute()

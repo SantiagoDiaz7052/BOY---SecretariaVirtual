@@ -16,10 +16,14 @@ class GeminiVisionAdapter:
     """Adaptador para analisis de imagenes con Gemini Vision.
     
     Aislamiento del dominio:
-    - Descarga la imagen de Twilio
-    - La envia a Gemini Vision
-    - Retorna VisionAnalysisResult
-    - Nunca lanza excepciones
+    - Descarga la imagen desde una URL
+    - La envia a Gemini Vision para extraer datos
+    - Retorna VisionAnalysisResult (DTO puro)
+    - NO conoce Obligaciones, Pagos, Clubes ni reglas de negocio
+    
+    El adaptador SOLO extrae datos de la imagen.
+    La logica de negocio (comparar montos, verificar obligaciones)
+    permanece en los servicios del dominio.
     """
     
     def __init__(self):
@@ -27,7 +31,7 @@ class GeminiVisionAdapter:
         self._twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
     
     def _descargar_imagen(self, imagen_url: str) -> GeminiResult:
-        """Descarga la imagen desde Twilio."""
+        """Descarga la imagen desde la URL proporcionada."""
         try:
             response = httpx.get(
                 imagen_url,
@@ -63,16 +67,42 @@ class GeminiVisionAdapter:
                 message=f"Error al descargar imagen: {str(e)}",
             )
     
-    def analizar_comprobante(self, imagen_url: str, 
-                             monto_esperado: float) -> GeminiResult:
-        """Analiza un comprobante de pago con Gemini Vision.
+    def _construir_prompt(self, monto_sugerido: float = None) -> str:
+        """Construye el prompt para analizar el comprobante.
+        
+        El prompt SOLO pide extraer datos visibles en la imagen.
+        NO incluye logica de negocio ni comparaciones.
+        """
+        prompt = """Analiza esta imagen y determina si es un comprobante de pago colombiano.
+
+Extrae la siguiente informacion SOLO si es visible en la imagen:
+
+MONTO: (solo el numero, sin puntos ni comas, ejemplo: 90000. Si no se ve, escribe NO_VISIBLE)
+FECHA: (formato YYYY-MM-DD, si no se ve claramente escribe NO_VISIBLE)
+REFERENCIA: (numero de referencia o transaccion, si no hay escribe NO_VISIBLE)
+ES_COMPROBANTE: (SI si parece una imagen legitima de pago, NO si no lo es)
+PLATAFORMA: (Nequi, Daviplata, transferencia bancaria, o DESCONOCIDA)
+
+Responde SOLO con el formato pedido, sin explicaciones adicionales."""
+
+        if monto_sugerido:
+            prompt += f"\n\nNota: Se esperaba un pago de aproximadamente ${monto_sugerido:,.0f} COP. Esto es solo como contexto, no como validacion."
+
+        return prompt
+
+    def analizar_imagen(self, imagen_url: str, 
+                        monto_sugerido: float = None) -> GeminiResult:
+        """Analiza una imagen y extrae datos de comprobante de pago.
         
         Args:
-            imagen_url: URL de la imagen en Twilio
-            monto_esperado: Monto esperado en COP
+            imagen_url: URL de la imagen a analizar
+            monto_sugerido: Monto esperado (opcional, solo para contexto del prompt)
         
         Returns:
             GeminiResult con VisionAnalysisResult como data
+            
+        Este metodo NO valida montos, NO verifica obligaciones.
+        Solo extrae datos de la imagen.
         """
         # 1. Descargar imagen
         descarga = self._descargar_imagen(imagen_url)
@@ -81,19 +111,9 @@ class GeminiVisionAdapter:
         
         imagen_data = descarga.data
         
-        # 2. Construir prompt
-        prompt = f"""Analiza este comprobante de pago colombiano.
-Extrae la siguiente informacion en formato exacto:
-
-MONTO: (solo el numero, sin puntos ni comas, ejemplo: 90000)
-FECHA: (formato YYYY-MM-DD, si no se ve claramente escribe DESCONOCIDA)
-REFERENCIA: (numero de referencia o transaccion, si no hay escribe NINGUNA)
-ES_COMPROBANTE: (SI o NO, si parece una imagen legitima de pago)
-PLATAFORMA: (Nequi, Daviplata, transferencia bancaria, o DESCONOCIDA)
-
-Monto esperado: ${monto_esperado:,.0f} COP
-El monto coincide aproximadamente? Responde solo con el formato pedido."""
-
+        # 2. Construir prompt (sin logica de negocio)
+        prompt = self._construir_prompt(monto_sugerido)
+        
         # 3. Construir contenido
         contents = [
             types.Content(parts=[
@@ -117,7 +137,7 @@ El monto coincide aproximadamente? Responde solo con el formato pedido."""
         if not resultado.success:
             return resultado
         
-        # 5. Parsear respuesta
+        # 5. Parsear respuesta a DTO
         try:
             texto = resultado.data.text
             analysis = VisionAnalysisResult.from_text(texto)
@@ -134,6 +154,9 @@ El monto coincide aproximadamente? Responde solo con el formato pedido."""
                 retries_used=resultado.retries_used,
             )
 
+
+# Importar types aqui para evitar circular imports
+from google.genai import types
 
 # Instancia global del adaptador de vision
 gemini_vision = GeminiVisionAdapter()

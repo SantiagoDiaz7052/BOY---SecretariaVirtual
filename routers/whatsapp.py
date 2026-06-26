@@ -1,14 +1,14 @@
 import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
-from services.mensajes import procesar_mensaje
 from application.whatsapp_app_service import WhatsAppAppService
+from application.mensajes_app_service import mensajes_service
 
 logger = logging.getLogger("boy.webhook")
 
 router = APIRouter()
 
-# Instancia del servicio de aplicacion
+# Instancia del servicio de aplicacion para pagos
 _app_service = WhatsAppAppService()
 
 
@@ -27,11 +27,13 @@ async def webhook_whatsapp(request: Request):
 
         # Si envió una imagen, verificar si es comprobante de pago
         if num_media > 0 and media_url and "image" in media_type:
-            respuesta = await _procesar_imagen_pago(
+            respuesta = _procesar_imagen_pago(
                 numero_usuario, numero_club, nombre, media_url
             )
         else:
-            respuesta = _procesar_mensaje(numero_usuario, numero_club, nombre, mensaje)
+            respuesta = _procesar_mensaje(
+                numero_usuario, numero_club, nombre, mensaje
+            )
 
     except Exception as e:
         logger.error(f"[WEBHOOK] Error inesperado: {e}", exc_info=True)
@@ -45,21 +47,33 @@ async def webhook_whatsapp(request: Request):
     return PlainTextResponse(content=twiml, media_type="application/xml")
 
 
-def _procesar_mensaje(numero_usuario: str, numero_club: str, 
+def _procesar_mensaje(numero_usuario: str, numero_club: str,
                        nombre: str, mensaje: str) -> str:
-    """Procesa un mensaje de texto usando el servicio de mensajes."""
-    return procesar_mensaje(numero_usuario, numero_club, nombre, mensaje)
+    """Procesa un mensaje de texto via capa de aplicacion.
+    
+    Flujo:
+    1. Buscar club
+    2. Obtener/crear conversacion
+    3. Gemini procesa (puede llamar funciones)
+    4. Guardar conversacion
+    5. Retornar respuesta
+    """
+    return mensajes_service.procesar_mensaje(
+        numero_usuario, numero_club, nombre, mensaje
+    )
 
 
-async def _procesar_imagen_pago(numero_usuario: str, numero_club: str,
-                                 nombre: str, imagen_url: str) -> str:
+def _procesar_imagen_pago(numero_usuario: str, numero_club: str,
+                           nombre: str, imagen_url: str) -> str:
     """Procesa una imagen de comprobante de pago.
     
-    FLUJO COMPLETO (sin acceder directamente a Supabase):
-    1. Buscar club via servicio de aplicacion
-    2. Buscar deportista via servicio de aplicacion
-    3. Procesar comprobante via servicio de aplicacion
-    4. Retornar respuesta
+    Flujo completo via capa de aplicacion:
+    1. Buscar club
+    2. Buscar deportista
+    3. Analizar comprobante con Gemini Vision
+    4. Validar (logica de negocio)
+    5. Registrar pago
+    6. Retornar respuesta
     """
     # 1. Buscar club
     club = _app_service.buscar_club(numero_club)
@@ -74,7 +88,7 @@ async def _procesar_imagen_pago(numero_usuario: str, numero_club: str,
         return ("No encontré tu registro en el club. "
                 "¿Ya estás inscrito? Si no, escribe *1* para inscribirte.")
 
-    # 3. Procesar comprobante
+    # 3. Procesar comprobante (Gemini Vision + logica de negocio + registro)
     resultado = _app_service.procesar_imagen_pago(
         club_id=club_id,
         deportista_id=deportista["id"],

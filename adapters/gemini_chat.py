@@ -4,7 +4,7 @@ from google.genai import types
 
 from adapters.gemini_client import gemini_client
 from adapters.gemini_models import GeminiResult
-from adapters.gemini_payments import consultar_estado_pago
+from adapters.gemini_payments import consultar_estado_pago, iniciar_proceso_pago
 from services.inscripciones import inscribir_deportista, consultar_deportista
 
 logger = logging.getLogger("boy.gemini.chat")
@@ -36,6 +36,12 @@ ESTADO DE PAGO:
 Cuando el usuario pregunte "¿cuánto debo?", "¿qué he pagado?", "¿está al día?", 
 o cualquier consulta sobre su estado financiero, pide su número de documento 
 y llama a consultar_estado_pago.
+
+PAGO DE MENSUALIDAD:
+Cuando el usuario quiera pagar, enviar comprobante, o diga "quiero pagar", "pagar mensualidad",
+pide su número de documento y llama a iniciar_proceso_pago. 
+La función retornará las instrucciones de pago que debes enviar al usuario.
+Después de enviar las instrucciones, indica que puede enviar el comprobante por imagen.
 """
 
 # Definición de herramientas para Gemini
@@ -70,6 +76,17 @@ herramientas = [
         types.FunctionDeclaration(
             name="consultar_estado_pago",
             description="Consulta el estado financiero de un deportista: cuánto debe, qué ha pagado, saldo pendiente.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "documento": types.Schema(type=types.Type.STRING, description="Número de documento del deportista"),
+                },
+                required=["documento"]
+            )
+        ),
+        types.FunctionDeclaration(
+            name="iniciar_proceso_pago",
+            description="Inicia un proceso de pago para un deportista. Retorna instrucciones de pago y la obligación a pagar.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
@@ -114,6 +131,10 @@ class GeminiChatAdapter:
         elif fn_name == "consultar_estado_pago" and club_id:
             resultado = consultar_estado_pago(club_id=club_id, **args)
             return resultado.get("mensaje", "No se pudo consultar el estado")
+        
+        elif fn_name == "iniciar_proceso_pago" and club_id:
+            resultado = iniciar_proceso_pago(club_id=club_id, **args)
+            return resultado.get("mensaje", "No se pudo iniciar el proceso de pago")
         
         return None
     
