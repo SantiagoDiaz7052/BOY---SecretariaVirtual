@@ -19,14 +19,15 @@ class GeminiClient:
     """Cliente resiliente para Gemini.
     
     Caracteristicas:
-    - Reintentos con backoff exponencial para 503
+    - Reintentos con backoff exponencial + jitter para 503
     - Manejo de timeouts y errores de red
     - Logging completo de errores
     - Nunca lanza excepciones al caller
     """
     
     MAX_RETRIES = 5
-    BASE_DELAY = 2  # segundos
+    BASE_DELAY = 3  # segundos base
+    MAX_DELAY = 30  # delay maximo
     
     def __init__(self):
         self._client = None
@@ -41,8 +42,12 @@ class GeminiClient:
         return self._client
     
     def _delay_for_retry(self, attempt: int) -> float:
-        """Calcula el delay exponencial: 1s, 2s, 4s."""
-        return self.BASE_DELAY * (2 ** attempt)
+        """Calcula el delay exponencial con jitter: ~3s, ~6s, ~12s, ~24s."""
+        import random
+        delay = min(self.BASE_DELAY * (2 ** attempt), self.MAX_DELAY)
+        # Agregar jitter (±30%) para evitar thundering herd
+        jitter = delay * 0.3 * (2 * random.random() - 1)
+        return delay + jitter
     
     def _classify_error(self, exception: Exception) -> str:
         """Clasifica el tipo de error para el caller."""
@@ -79,7 +84,8 @@ class GeminiClient:
     
     def generate_content(self, model: str, contents: list, 
                          config: Optional[types.GenerateContentConfig] = None,
-                         context: str = "general") -> GeminiResult:
+                         context: str = "general",
+                         fallback_model: Optional[str] = None) -> GeminiResult:
         """Genera contenido con reintentos y manejo de errores.
         
         Args:
@@ -87,6 +93,7 @@ class GeminiClient:
             contents: Lista de Content objects
             config: Configuracion generativa
             context: Contexto para logs (ej: "vision", "chat")
+            fallback_model: Modelo alternativo si el principal falla con 503
         
         Returns:
             GeminiResult con success=True o success=False
@@ -125,11 +132,23 @@ class GeminiClient:
                     if attempt < self.MAX_RETRIES - 1:
                         delay = self._delay_for_retry(attempt)
                         logger.info(
-                            f"[GEMINI_RETRY] Reintentando en {delay}s "
+                            f"[GEMINI_RETRY] Reintentando en {delay:.1f}s "
                             f"(intento {attempt + 2}/{self.MAX_RETRIES})"
                         )
                         time.sleep(delay)
                         continue
+                    # Si agota reintentos y hay fallback, intentar con ese
+                    elif fallback_model and model != fallback_model:
+                        logger.info(
+                            f"[GEMINI_FALLBACK] Probando modelo alternativo: {fallback_model}"
+                        )
+                        return self.generate_content(
+                            model=fallback_model,
+                            contents=contents,
+                            config=config,
+                            context=context,
+                            fallback_model=None,  # Sin fallback adicional
+                        )
                 
                 # Otros errores del servidor no se reintentan
                 return GeminiResult.fail(

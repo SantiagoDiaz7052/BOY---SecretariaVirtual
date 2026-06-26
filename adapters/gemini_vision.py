@@ -132,6 +132,7 @@ Responde SOLO con el formato pedido, sin explicaciones adicionales."""
             model="gemini-2.0-flash-lite",
             contents=contents,
             context="vision_comprobante",
+            fallback_model="gemini-2.0-flash",
         )
         
         if not resultado.success:
