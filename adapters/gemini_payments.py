@@ -1,18 +1,12 @@
 import logging
 from typing import Optional
-from application.whatsapp_app_service import WhatsAppAppService
+from application.deportista_service import DeportistaService
+from application.obligacion_service import ObligacionService
+from application.proceso_pago_service import ProcesoPagoService
+from application.config_service import ConfiguracionClubService
+from application.temporada_service import TemporadaService
 
 logger = logging.getLogger("boy.gemini.payments")
-
-# Instancia del servicio (se inicia una vez)
-_app_service: Optional[WhatsAppAppService] = None
-
-
-def _get_app_service() -> WhatsAppAppService:
-    global _app_service
-    if _app_service is None:
-        _app_service = WhatsAppAppService()
-    return _app_service
 
 
 def consultar_estado_pago(documento: str, club_id: str) -> dict:
@@ -28,31 +22,25 @@ def consultar_estado_pago(documento: str, club_id: str) -> dict:
         dict con el resumen financiero
     """
     try:
-        service = _get_app_service()
+        deportista_service = DeportistaService()
+        obligacion_service = ObligacionService()
         
         # Buscar deportista por documento
-        from services.supabase_client import supabase
-        deportista = supabase.table("deportistas")\
-            .select("id, nombre, categoria")\
-            .eq("club_id", club_id)\
-            .eq("documento", documento)\
-            .single()\
-            .execute()
+        deportista = deportista_service.buscar_por_documento(club_id, documento)
         
-        if not deportista.data:
+        if not deportista:
             return {
                 "encontrado": False,
-                "mensaje": "No se encontró ningún deportista con ese documento.",
+                "mensaje": "No se encontro ningun deportista con ese documento.",
             }
         
-        d = deportista.data
-        
         # Obtener resumen financiero
-        resumen = service.resumen_estado(club_id, d["id"])
+        resumen = obligacion_service.resumen_estado(club_id, deportista.id)
         
         # Formatear respuesta para Gemini
         partes = []
-        partes.append(f"Deportista: {d['nombre']} ({d['categoria']})")
+        partes.append(f"Deportista: {deportista.nombre} ({deportista.nivel})")
+        partes.append(f"Estado: {deportista.estado.upper()}")
         
         if resumen["cantidad_pendientes"] > 0:
             partes.append(f"\nDebes: ${resumen['total_debe']:,.0f} COP")
@@ -67,7 +55,7 @@ def consultar_estado_pago(documento: str, club_id: str) -> dict:
             partes.append("\nNo tienes obligaciones pendientes.")
         
         if resumen["cantidad_pagadas"] > 0:
-            partes.append(f"\nPagado este año: ${resumen['total_pagado']:,.0f} COP")
+            partes.append(f"\nPagado este anio: ${resumen['total_pagado']:,.0f} COP")
             partes.append(f"({resumen['cantidad_pagadas']} pago(s) confirmado(s))")
         
         return {
@@ -102,52 +90,63 @@ def iniciar_proceso_pago(documento: str, club_id: str) -> dict:
         dict con instrucciones de pago
     """
     try:
-        service = _get_app_service()
+        deportista_service = DeportistaService()
+        obligacion_service = ObligacionService()
+        proceso_service = ProcesoPagoService()
+        config_service = ConfiguracionClubService()
+        temporada_service = TemporadaService()
         
         # Buscar deportista por documento
-        from services.supabase_client import supabase
-        deportista = supabase.table("deportistas")\
-            .select("id, nombre, categoria, telefono")\
-            .eq("club_id", club_id)\
-            .eq("documento", documento)\
-            .single()\
-            .execute()
+        deportista = deportista_service.buscar_por_documento(club_id, documento)
         
-        if not deportista.data:
+        if not deportista:
             return {
                 "exito": False,
-                "mensaje": "No se encontró ningún deportista con ese documento.",
+                "mensaje": "No se encontro ningun deportista con ese documento.",
             }
         
-        d = deportista.data
+        # Obtener temporada activa
+        temporada = temporada_service.obtener_activa(club_id)
+        if not temporada:
+            return {
+                "exito": False,
+                "mensaje": "No hay temporada activa. Contacta al administrador.",
+            }
         
         # Buscar obligacion pendiente
-        obligacion = service.obtener_obligacion_pendiente(club_id, d["id"])
+        obligaciones = obligacion_service.listar_por_deportista(
+            club_id, deportista.id, solo_pendientes=True
+        )
         
-        if not obligacion:
+        if not obligaciones:
             return {
                 "exito": False,
-                "mensaje": (f"{d['nombre']}, no tienes mensualidades pendientes. "
-                           "Si crees que es un error, escribe *10* para hablar con Ivonn."),
+                "mensaje": (
+                    f"{deportista.nombre}, no tienes mensualidades pendientes. "
+                    "Si crees que es un error, escribe *10* para hablar con Ivonn."
+                ),
             }
         
+        # Usar la primera obligacion pendiente
+        obligacion = obligaciones[0]
         monto = float(obligacion["monto_total"])
         periodo = obligacion.get("periodo", "actual")
         
         # Iniciar proceso de pago
-        proceso = service.proceso_service.iniciar_proceso(
+        proceso = proceso_service.iniciar_proceso(
             club_id=club_id,
-            deportista_id=d["id"],
+            temporada_id=temporada.id,
+            deportista_id=deportista.id,
             obligacion_id=obligacion["id"],
         )
         
         # Obtener llave Bre-B del club
-        config = service.config_service.obtener_por_club(club_id)
+        config = config_service.obtener_por_club(club_id)
         llave_bre = config.llave_bre_b if config and config.llave_bre_b else "No configurada"
         
         # Formatear instrucciones
         instrucciones = (
-            f"Perfecto {d['nombre']}, encontre tu mensualidad pendiente:\n\n"
+            f"Perfecto {deportista.nombre}, encontre tu mensualidad pendiente:\n\n"
             f"Monto: ${monto:,.0f} COP\n"
             f"Periodo: {periodo}\n\n"
             f"Datos de pago:\n"

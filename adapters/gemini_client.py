@@ -25,8 +25,8 @@ class GeminiClient:
     - Nunca lanza excepciones al caller
     """
     
-    MAX_RETRIES = 3
-    BASE_DELAY = 1  # segundos
+    MAX_RETRIES = 5
+    BASE_DELAY = 2  # segundos
     
     def __init__(self):
         self._client = None
@@ -134,7 +134,7 @@ class GeminiClient:
                 # Otros errores del servidor no se reintentan
                 return GeminiResult.fail(
                     error_type=error_type,
-                    message=f"Error del servidor Gemini: {str(e)}",
+                    message=f"Error del servidor Gemini: {str(e)} Vuelve a enviar tu mensaje 😉",
                     retries_used=attempt,
                 )
                 

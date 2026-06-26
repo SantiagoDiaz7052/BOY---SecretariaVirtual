@@ -5,7 +5,8 @@ from google.genai import types
 from adapters.gemini_client import gemini_client
 from adapters.gemini_models import GeminiResult
 from adapters.gemini_payments import consultar_estado_pago, iniciar_proceso_pago
-from services.inscripciones import inscribir_deportista, consultar_deportista
+from adapters.gemini_inscription import registrar_inscripcion
+from services.inscripciones import consultar_deportista
 
 logger = logging.getLogger("boy.gemini.chat")
 
@@ -20,14 +21,19 @@ REGLAS ESTRICTAS:
 - Ve directo al punto
 - Si necesitas datos del usuario, pide UN solo dato a vez
 
-PROCESO DE INSCRIPCIÓN:
+PROCESO DE INSCRIPCIÓN (MATRÍCULA):
 Cuando el usuario quiera inscribirse, recolecta estos datos UNO POR UNO en este orden:
 1. Nombre completo
 2. Número de documento
 3. Teléfono de contacto
 4. Fecha de nacimiento (formato YYYY-MM-DD)
-5. Categoría (Infantil, Juvenil o Élite)
-Cuando tengas TODOS los datos, llama a la función inscribir_deportista.
+5. Experiencia en patinaje (pregunta abierta: "¿Ya tiene experiencia patinando?")
+
+Si el usuario no responde claramente sobre experiencia o dice "no se",
+responde: "Ok, [nombre] te evaluará y determinará en qué grupo debes estar."
+y continúa con el flujo.
+
+Cuando tengas TODOS los datos, llama a la función registrar_inscripcion.
 
 CONSULTA DE DEPORTISTA:
 Cuando el usuario quiera saber su estado o info, pide el documento y llama a consultar_deportista.
@@ -48,8 +54,8 @@ Después de enviar las instrucciones, indica que puede enviar el comprobante por
 herramientas = [
     types.Tool(function_declarations=[
         types.FunctionDeclaration(
-            name="inscribir_deportista",
-            description="Inscribe un nuevo deportista en el club cuando se tienen todos sus datos.",
+            name="registrar_inscripcion",
+            description="Registra una preinscripción de matrícula cuando se tienen todos los datos del deportista.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
@@ -57,9 +63,9 @@ herramientas = [
                     "documento": types.Schema(type=types.Type.STRING, description="Número de documento"),
                     "telefono": types.Schema(type=types.Type.STRING, description="Teléfono de contacto"),
                     "fecha_nacimiento": types.Schema(type=types.Type.STRING, description="Fecha YYYY-MM-DD"),
-                    "categoria": types.Schema(type=types.Type.STRING, description="Infantil, Juvenil o Élite"),
+                    "experiencia_patinaje": types.Schema(type=types.Type.STRING, description="Experiencia en patinaje del usuario"),
                 },
-                required=["nombre", "documento", "telefono", "fecha_nacimiento", "categoria"]
+                required=["nombre", "documento", "telefono", "fecha_nacimiento"]
             )
         ),
         types.FunctionDeclaration(
@@ -114,16 +120,16 @@ class GeminiChatAdapter:
     def _ejecutar_funcion(self, fn_name: str, args: dict, 
                           club_id: Optional[str]) -> Optional[str]:
         """Ejecuta una funcion llamada por Gemini."""
-        if fn_name == "inscribir_deportista" and club_id:
-            resultado = inscribir_deportista(club_id=club_id, **args)
-            return resultado.get("mensaje", "Error al inscribir")
+        if fn_name == "registrar_inscripcion" and club_id:
+            resultado = registrar_inscripcion(club_id=club_id, **args)
+            return resultado.get("mensaje", "Error al registrar inscripcion")
         
         elif fn_name == "consultar_deportista" and club_id:
             resultado = consultar_deportista(club_id=club_id, **args)
             if resultado.get("encontrado"):
                 return (
                     f"Deportista: {resultado['nombre']}\n"
-                    f"Categoría: {resultado['categoria']}\n"
+                    f"Nivel: {resultado['nivel']}\n"
                     f"Estado: {resultado['estado']}"
                 )
             return resultado.get("mensaje", "Deportista no encontrado")

@@ -52,13 +52,16 @@ class ObligacionService:
                          fecha_limite: Optional[date] = None,
                          periodo: Optional[str] = None,
                          referencia: Optional[str] = None,
-                         nota: Optional[str] = None) -> dict:
+                         nota: Optional[str] = None,
+                         temporada_id: Optional[str] = None,
+                         preinscripcion_id: Optional[str] = None) -> dict:
         """Crea una nueva obligacion.
         
         REGLAS:
         - El monto se copia del concepto (o se especifica manualmente)
         - Si es recurrente, se requiere periodo
         - Se verifica que no exista duplicada
+        - Se asocia a temporada y preinscripcion (opcional)
         """
         # Verificar que el concepto existe y esta activo
         concepto = self.concepto_repo.obtener_por_id(concepto_id)
@@ -89,6 +92,12 @@ class ObligacionService:
             "referencia": referencia,
             "nota": nota,
         }
+        
+        # Campos opcionales nuevos
+        if temporada_id:
+            datos["temporada_id"] = temporada_id
+        if preinscripcion_id:
+            datos["preinscripcion_id"] = preinscripcion_id
         
         obligacion = self.repo.crear(datos)
         return obligacion.to_dict()

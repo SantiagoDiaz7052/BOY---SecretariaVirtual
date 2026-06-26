@@ -66,7 +66,7 @@ class ProcesoPagoRepository:
     def cancelar_inactivos(self, horas_limite: int = 24) -> int:
         """Cancela procesos activos mas antiguos que las horas limite.
         
-        Util para limpiar procesos que el usuario abandonó.
+        Util para limpiar procesos que el usuario abandono.
         Retorna la cantidad de procesos cancelados.
         """
         from datetime import datetime, timedelta
@@ -80,3 +80,37 @@ class ProcesoPagoRepository:
             .execute()
         
         return len(resultado.data) if resultado.data else 0
+
+    def expirar_inactivos(self, horas_limite: int = 48) -> int:
+        """Expira procesos activos mas antiguos que las horas limite.
+        
+        Util para limpiar procesos que el usuario abandono.
+        Retorna la cantidad de procesos expirados.
+        """
+        from datetime import datetime, timedelta
+        
+        limite = datetime.now() - timedelta(hours=horas_limite)
+        
+        resultado = supabase.table(self.TABLE)\
+            .update({"estado": "expirado"})\
+            .eq("estado", EstadoProcesoPago.ACTIVO.value)\
+            .lt("created_at", limite.isoformat())\
+            .execute()
+        
+        return len(resultado.data) if resultado.data else 0
+
+    def obtener_activo_por_preinscripcion(self, club_id: str, 
+                                          preinscripcion_id: str) -> Optional[ProcesoPago]:
+        """Obtiene el proceso de pago activo de una preinscripcion."""
+        resultado = supabase.table(self.TABLE)\
+            .select("*")\
+            .eq("club_id", club_id)\
+            .eq("preinscripcion_id", preinscripcion_id)\
+            .eq("estado", EstadoProcesoPago.ACTIVO.value)\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+        
+        if not resultado.data:
+            return None
+        return ProcesoPago.from_dict(resultado.data[0])

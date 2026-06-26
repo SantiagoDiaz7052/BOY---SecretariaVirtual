@@ -38,22 +38,36 @@ class ProcesoPagoService:
             return None
         return proceso.to_dict()
 
-    def iniciar_proceso(self, club_id: str, deportista_id: str,
-                        obligacion_id: Optional[str] = None) -> dict:
+    def iniciar_proceso(self, club_id: str, deportista_id: Optional[str] = None,
+                        obligacion_id: Optional[str] = None,
+                        temporada_id: Optional[str] = None,
+                        preinscripcion_id: Optional[str] = None) -> dict:
         """Inicia un nuevo proceso de pago.
         
         Si ya hay un proceso activo, retorna ese proceso.
         Si no hay obligacion pendiente, se puede iniciar sin ella
         (el bot determinara la obligacion despues).
+        
+        REGLAS:
+        - preinscripcion_id O deportista_id sera None, no ambos
+        - Para matricula: preinscripcion_id esta set, deportista_id es None
+        - Para activacion: deportista_id esta set, preinscripcion_id es None
         """
-        # Verificar si ya hay un proceso activo
-        proceso_activo = self.repo.obtener_activo_por_deportista(
-            club_id, deportista_id
-        )
+        # Verificar si ya hay un proceso activo (por deportista o preinscripcion)
+        if deportista_id:
+            proceso_activo = self.repo.obtener_activo_por_deportista(
+                club_id, deportista_id
+            )
+        elif preinscripcion_id:
+            proceso_activo = self.repo.obtener_activo_por_preinscripcion(
+                club_id, preinscripcion_id
+            )
+        else:
+            proceso_activo = None
+
         if proceso_activo:
             logger.info(
                 f"[PROCESO] Proceso ya existe: {proceso_activo.id} "
-                f"para deportista {deportista_id}"
             )
             return proceso_activo.to_dict()
 
@@ -73,6 +87,7 @@ class ProcesoPagoService:
             "club_id": club_id,
             "deportista_id": deportista_id,
             "obligacion_id": obligacion_id,
+            "preinscripcion_id": preinscripcion_id,
             "llave_bre_b": llave_bre,
             "monto_informado": monto_informado,
             "estado": EstadoProcesoPago.ACTIVO.value,
@@ -82,9 +97,12 @@ class ProcesoPagoService:
                 "detalle": "Proceso de pago iniciado",
             }],
         }
+        
+        if temporada_id:
+            datos["temporada_id"] = temporada_id
 
         proceso = self.repo.crear(datos)
-        logger.info(f"[PROCESO] Nuevo proceso: {proceso.id} para deportista {deportista_id}")
+        logger.info(f"[PROCESO] Nuevo proceso: {proceso.id}")
         return proceso.to_dict()
 
     def registrar_evento(self, proceso_id: str, evento: EventoProcesoPago,
@@ -178,6 +196,19 @@ class ProcesoPagoService:
 
         return proceso.to_dict()
 
-    def limpiar_procesos_inactivos(self, horas_limite: int = 24) -> int:
-        """Cancela procesos abandonados. Util para cron job."""
-        return self.repo.cancelar_inactivos(horas_limite)
+    def expirar_proceso(self, proceso_id: str) -> dict:
+        """Expira un proceso de pago por inactividad."""
+        proceso = self.repo.obtener_por_id(proceso_id)
+        if not proceso:
+            raise ValueError(f"Proceso {proceso_id} no encontrado")
+
+        self.repo.actualizar(proceso_id, {
+            "estado": "expirado",
+            "historial": [e.to_dict() for e in proceso.historial],
+        })
+
+        return proceso.to_dict()
+
+    def limpiar_procesos_inactivos(self, horas_limite: int = 48) -> int:
+        """Expira procesos abandonados. Util para cron job."""
+        return self.repo.expirar_inactivos(horas_limite)
