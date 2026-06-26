@@ -30,3 +30,8 @@ wompi < nequi
 mediante los comprobantes que da nequi
 
 ####################################################
+
+
+## mensaje de demanda alta de api de gemini
+
+## idea de tvvilo

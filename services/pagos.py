@@ -1,100 +1,58 @@
+import logging
 from services.supabase_client import supabase
-from google import genai
-from google.genai import types
-from dotenv import load_dotenv
-import os
-import httpx
-import base64
+from adapters.gemini_vision import gemini_vision
+from adapters.gemini_models import GeminiResult
 
-load_dotenv()
+logger = logging.getLogger("boy.pagos")
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def analizar_comprobante(imagen_url: str, monto_esperado: float) -> dict:
-    """Descarga la imagen y la analiza con Gemini Vision"""
-    try:
-        # Descargar imagen desde Twilio
-        twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
-        
-        response = httpx.get(
-            imagen_url, 
-            auth=(twilio_sid, twilio_token),
-            timeout=15
-        )
-        imagen_base64 = base64.b64encode(response.content).decode("utf-8")
-        content_type = response.headers.get("content-type", "image/jpeg")
-
-        prompt = f"""Analiza este comprobante de pago colombiano.
-Extrae la siguiente información en formato exacto:
-
-MONTO: (solo el número, sin puntos ni comas, ejemplo: 90000)
-FECHA: (formato YYYY-MM-DD, si no se ve claramente escribe DESCONOCIDA)
-REFERENCIA: (número de referencia o transacción, si no hay escribe NINGUNA)
-ES_COMPROBANTE: (SI o NO, si parece una imagen legítima de pago)
-PLATAFORMA: (Nequi, Daviplata, transferencia bancaria, o DESCONOCIDA)
-
-Monto esperado: ${monto_esperado:,.0f} COP
-¿El monto coincide aproximadamente? Responde solo con el formato pedido."""
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-lite",
-            contents=[
-                types.Content(parts=[
-                    types.Part(
-                        inline_data=types.Blob(
-                            mime_type=content_type,
-                            data=imagen_base64
-                        )
-                    ),
-                    types.Part(text=prompt)
-                ])
-            ]
-        )
-
-        texto = response.text
-        resultado = {
-            "es_comprobante": False,
-            "monto_detectado": None,
-            "referencia": None,
-            "fecha": None,
-            "plataforma": None,
-            "texto_completo": texto
+    """Descarga la imagen y la analiza con Gemini Vision.
+    
+    Ahora usa el adaptador resiliente. Si Gemini falla,
+    retorna un dict con error en lugar de lanzar excepcion.
+    """
+    resultado: GeminiResult = gemini_vision.analizar_comprobante(
+        imagen_url, monto_esperado
+    )
+    
+    if resultado.success:
+        analysis = resultado.data
+        return {
+            "es_comprobante": analysis.es_comprobante,
+            "monto_detectado": analysis.monto_detectado,
+            "referencia": analysis.referencia,
+            "fecha": analysis.fecha,
+            "plataforma": analysis.plataforma,
+            "texto_completo": analysis.texto_completo,
+            "error": None,
+            "gemini_retries": resultado.retries_used,
         }
-
-        for linea in texto.strip().split("\n"):
-            if "MONTO:" in linea:
-                try:
-                    monto_str = linea.split("MONTO:")[1].strip().replace(".", "").replace(",", "")
-                    resultado["monto_detectado"] = float(monto_str)
-                except:
-                    pass
-            elif "FECHA:" in linea:
-                resultado["fecha"] = linea.split("FECHA:")[1].strip()
-            elif "REFERENCIA:" in linea:
-                resultado["referencia"] = linea.split("REFERENCIA:")[1].strip()
-            elif "ES_COMPROBANTE:" in linea:
-                resultado["es_comprobante"] = "SI" in linea.upper()
-            elif "PLATAFORMA:" in linea:
-                resultado["plataforma"] = linea.split("PLATAFORMA:")[1].strip()
-
-        return resultado
-
-    except Exception as e:
+    else:
+        # Gemini fallo - retornar error controlado
+        logger.warning(
+            f"[PAGOS] Gemini Vision fallo: "
+            f"error_type={resultado.error_type} | "
+            f"message={resultado.message} | "
+            f"retries={resultado.retries_used}"
+        )
         return {
             "es_comprobante": False,
             "monto_detectado": None,
             "referencia": None,
             "fecha": None,
             "plataforma": None,
-            "error": str(e)
+            "texto_completo": None,
+            "error": resultado.message,
+            "error_type": resultado.error_type,
+            "gemini_retries": resultado.retries_used,
         }
 
 
 def registrar_pago_pendiente(club_id: str, deportista_id: str, 
                               monto_esperado: float, mes_anio: str,
                               imagen_url: str, analisis: dict) -> dict:
-    """Registra el pago en Supabase como pendiente de verificación"""
+    """Registra el pago en Supabase como pendiente de verificacion"""
     
     pago = supabase.table("pagos").insert({
         "club_id": club_id,
@@ -108,7 +66,12 @@ def registrar_pago_pendiente(club_id: str, deportista_id: str,
         "mes_anio": mes_anio,
         "imagen_url": imagen_url,
         "estado": "pendiente_verificacion",
-        "wompi_data": {"analisis_gemini": analisis.get("texto_completo")}
+        "wompi_data": {
+            "analisis_gemini": analisis.get("texto_completo"),
+            "error_gemini": analisis.get("error"),
+            "error_type": analisis.get("error_type"),
+            "gemini_retries": analisis.get("gemini_retries", 0),
+        }
     }).execute()
 
     return pago.data[0] if pago.data else {}
