@@ -186,7 +186,7 @@ class GeminiChatAdapter:
             contents=contents,
             config=config,
             context="chat",
-            fallback_model="gemini-2.0-flash",
+            fallback_model="gemini-2.5-flash",
         )
         
         if not resultado.success:

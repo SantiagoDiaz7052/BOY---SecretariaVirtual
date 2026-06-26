@@ -153,7 +153,7 @@ class GeminiClient:
                 # Otros errores del servidor no se reintentan
                 return GeminiResult.fail(
                     error_type=error_type,
-                    message=f"Error del servidor Gemini: {str(e)} Vuelve a enviar tu mensaje 😉",
+                    message="Estoy teniendo un problema temporal. Por favor, intenta preguntar de nuevo.",
                     retries_used=attempt,
                 )
                 
@@ -171,9 +171,17 @@ class GeminiClient:
                     time.sleep(delay)
                     continue
                 
+                # Error de modelo no encontrado - usar mensaje amigable
+                if "NOT_FOUND" in str(e) or "no longer available" in str(e):
+                    return GeminiResult.fail(
+                        error_type=error_type,
+                        message="Estoy teniendo un problema temporal. Por favor, intenta preguntar de nuevo.",
+                        retries_used=attempt,
+                    )
+                
                 return GeminiResult.fail(
                     error_type=error_type,
-                    message=f"Error de cliente Gemini: {str(e)}",
+                    message="Estoy teniendo un problema temporal. Por favor, intenta preguntar de nuevo.",
                     retries_used=attempt,
                 )
                 
