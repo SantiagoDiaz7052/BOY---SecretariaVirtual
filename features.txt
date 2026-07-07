@@ -35,3 +35,7 @@ mediante los comprobantes que da nequi
 ## mensaje de demanda alta de api de gemini
 
 ## idea de tvvilo
+
+# eliminar que pregunte el grupo (debe ser manual)
+
+#arreglar lo del nombre del profesor

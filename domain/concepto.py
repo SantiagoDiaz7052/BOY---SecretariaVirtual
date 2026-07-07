@@ -27,6 +27,7 @@ class Concepto:
     aplica_mora: bool = False
     requiere_periodo: bool = False
     monto_default: float = 0
+    precios_por_nivel: Optional[dict] = None
     recargo_fijo: Optional[float] = None
     dias_limite_pago: Optional[int] = None
     version: int = 1
@@ -45,6 +46,7 @@ class Concepto:
             aplica_mora=data.get("aplica_mora", False),
             requiere_periodo=data.get("requiere_periodo", False),
             monto_default=float(data.get("monto_default", 0)),
+            precios_por_nivel=data.get("precios_por_nivel"),
             recargo_fijo=float(data["recargo_fijo"]) if data.get("recargo_fijo") is not None else None,
             dias_limite_pago=data.get("dias_limite_pago"),
             version=data.get("version", 1),
@@ -63,6 +65,7 @@ class Concepto:
             "aplica_mora": self.aplica_mora,
             "requiere_periodo": self.requiere_periodo,
             "monto_default": self.monto_default,
+            "precios_por_nivel": self.precios_por_nivel,
             "recargo_fijo": self.recargo_fijo,
             "dias_limite_pago": self.dias_limite_pago,
             "version": self.version,

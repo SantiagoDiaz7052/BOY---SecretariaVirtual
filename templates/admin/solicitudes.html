@@ -1,0 +1,125 @@
+{% extends "admin/base.html" %}
+{% block title %}Solicitudes — BOY{% endblock %}
+{% block header_title %}Solicitudes de Ingreso{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Solicitudes de Ingreso</h2>
+  <p>Gestión del flujo de admisión de nuevos deportistas</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>Todas las solicitudes</h3>
+    <div class="filters">
+      <select class="filter-select" data-filter="estado">
+        <option value="">Todos los estados</option>
+        <option value="pendiente_evaluacion">Pendiente evaluación</option>
+        <option value="evaluado">Evaluado</option>
+        <option value="pendiente_matricula">Pendiente matrícula</option>
+        <option value="matricula_pagada">Matrícula pagada</option>
+        <option value="pendiente_activacion">Pendiente activación</option>
+        <option value="completado">Completado</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+      <input type="text" class="search-input filter-search" placeholder="Buscar por nombre o documento..." data-filter="search">
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="table-container">
+      <table class="filter-table">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Documento</th>
+            <th>Teléfono</th>
+            <th>Experiencia</th>
+            <th>Nivel</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in solicitudes %}
+          <tr>
+            <td data-col="search"><strong>{{ s.nombre }}</strong></td>
+            <td data-col="search">{{ s.documento }}</td>
+            <td>{{ s.telefono }}</td>
+            <td>{{ s.experiencia or '-' }}</td>
+            <td>{{ s.nivel or '—' }}</td>
+            <td data-col="estado"><span class="badge badge-{{ s.badge }}">{{ s.estado }}</span></td>
+            <td>{{ s.fecha }}</td>
+            <td>
+              <button class="btn btn-sm" data-drawer-open="drawer-solicitud-{{ s.id }}">Ver</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% for s in solicitudes %}
+<div class="drawer-overlay" id="drawer-solicitud-{{ s.id }}-overlay"></div>
+<div class="drawer" id="drawer-solicitud-{{ s.id }}">
+  <div class="drawer-header">
+    <h3>{{ s.nombre }}</h3>
+    <button class="drawer-close">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-section">
+      <label>Estado</label>
+      <p><span class="badge badge-{{ s.badge }}">{{ s.estado }}</span></p>
+    </div>
+    <div class="drawer-section">
+      <label>Documento</label>
+      <p>{{ s.documento }}</p>
+    </div>
+    <div class="drawer-section">
+      <label>Teléfono</label>
+      <p>{{ s.telefono }}</p>
+    </div>
+    <div class="drawer-section">
+      <label>Fecha de nacimiento</label>
+      <p>{{ s.fecha_nacimiento or '-' }}</p>
+    </div>
+    <div class="drawer-section">
+      <label>Experiencia reportada</label>
+      <p>{{ s.experiencia or 'No reportó' }}</p>
+    </div>
+    <div class="drawer-section">
+      <label>Nivel asignado</label>
+      <p>{{ s.nivel or 'Pendiente de evaluación' }}</p>
+    </div>
+    {% if s.responsable_nombre %}
+    <div class="drawer-section">
+      <label>Responsable</label>
+      <p>{{ s.responsable_nombre }} ({{ s.responsable_documento or '' }})</p>
+    </div>
+    {% endif %}
+    <div class="drawer-section">
+      <label>Creado</label>
+      <p>{{ s.fecha_creacion }}</p>
+    </div>
+    <hr style="border: none; border-top: 1px solid var(--border); margin: 16px 0;">
+    <div class="btn-group" style="flex-wrap: wrap;">
+      {% if s.estado_raw == 'pendiente_evaluacion' %}
+      <button class="btn btn-primary btn-sm" disabled>Evaluar (próximamente)</button>
+      {% elif s.estado_raw == 'evaluado' %}
+      <button class="btn btn-primary btn-sm" disabled>Solicitar matrícula (próximamente)</button>
+      {% elif s.estado_raw == 'pendiente_matricula' %}
+      <button class="btn btn-success btn-sm" disabled>Confirmar pago (próximamente)</button>
+      {% elif s.estado_raw == 'matricula_pagada' %}
+      <button class="btn btn-primary btn-sm" disabled>Activar (próximamente)</button>
+      {% elif s.estado_raw == 'pendiente_activacion' %}
+      <button class="btn btn-success btn-sm" disabled>Completar (próximamente)</button>
+      {% endif %}
+      {% if s.estado_raw not in ('completado', 'cancelado') %}
+      <button class="btn btn-danger btn-sm" disabled>Cancelar (próximamente)</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

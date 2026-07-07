@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Panel Administrativo{% endblock %} — BOY</title>
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>BOY</h1>
+      <span>Secretaria Virtual</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="sidebar-section">General</div>
+      <a href="/admin" class="sidebar-link">
+        <span class="icon">📊</span>
+        <span>Dashboard</span>
+      </a>
+      <a href="/admin/solicitudes" class="sidebar-link">
+        <span class="icon">📋</span>
+        <span>Solicitudes</span>
+      </a>
+      <a href="/admin/tareas" class="sidebar-link">
+        <span class="icon">✅</span>
+        <span>Tareas</span>
+      </a>
+      <a href="/admin/pagos" class="sidebar-link">
+        <span class="icon">💰</span>
+        <span>Pagos</span>
+      </a>
+      <a href="/admin/deportistas" class="sidebar-link">
+        <span class="icon">👤</span>
+        <span>Deportistas</span>
+      </a>
+      <div class="sidebar-section">Configuración</div>
+      <a href="/admin/conceptos" class="sidebar-link">
+        <span class="icon">🏷️</span>
+        <span>Conceptos</span>
+      </a>
+      <a href="/admin/configuracion" class="sidebar-link">
+        <span class="icon">⚙️</span>
+        <span>Configuración</span>
+      </a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <header class="header">
+      <div class="header-title">{% block header_title %}Panel{% endblock %}</div>
+      <div class="header-badge">Club de Patinaje</div>
+    </header>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+
+  <script src="/static/js/admin.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

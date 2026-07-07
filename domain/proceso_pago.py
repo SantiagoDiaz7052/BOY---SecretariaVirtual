@@ -5,15 +5,17 @@ from enum import Enum
 
 
 class EstadoProcesoPago(str, Enum):
-    """Estados simplificados del proceso de pago.
+    """Estados del proceso de pago.
     
-    Los estados excesivos generan bugs.
-    Solo 3 estados: ACTIVO, FINALIZADO, CANCELADO.
-    Los detalles se registran como eventos.
+    ACTIVO: en curso
+    FINALIZADO: completado exitosamente
+    CANCELADO: cancelado por usuario o timeout
+    EXPIRADO: abandonado (sin actividad por mas de N tiempo)
     """
     ACTIVO = "activo"
     FINALIZADO = "finalizado"
     CANCELADO = "cancelado"
+    EXPIRADO = "expirado"
 
 
 class EventoProcesoPago(str, Enum):
@@ -84,6 +86,7 @@ class ProcesoPago:
     id: str
     club_id: str
     deportista_id: str
+    solicitud_ingreso_id: Optional[str] = None
     obligacion_id: Optional[str] = None
     llave_bre_b: Optional[str] = None
     monto_informado: Optional[float] = None
@@ -101,6 +104,7 @@ class ProcesoPago:
             id=data["id"],
             club_id=data["club_id"],
             deportista_id=data["deportista_id"],
+            solicitud_ingreso_id=data.get("solicitud_ingreso_id"),
             obligacion_id=data.get("obligacion_id"),
             llave_bre_b=data.get("llave_bre_b"),
             monto_informado=float(data["monto_informado"]) if data.get("monto_informado") else None,
@@ -115,6 +119,7 @@ class ProcesoPago:
             "id": self.id,
             "club_id": self.club_id,
             "deportista_id": self.deportista_id,
+            "solicitud_ingreso_id": self.solicitud_ingreso_id,
             "obligacion_id": self.obligacion_id,
             "llave_bre_b": self.llave_bre_b,
             "monto_informado": self.monto_informado,
@@ -147,4 +152,12 @@ class ProcesoPago:
             EventoProcesoPago.CANCELADO_USUARIO if motivo == "usuario" 
             else EventoProcesoPago.CANCELADO_TIMEOUT,
             detalle=motivo,
+        )
+
+    def expirar(self) -> None:
+        """Marca el proceso como expirado por inactividad."""
+        self.estado = EstadoProcesoPago.EXPIRADO
+        self.agregar_evento(
+            EventoProcesoPago.CANCELADO_TIMEOUT,
+            detalle="expirado por inactividad",
         )

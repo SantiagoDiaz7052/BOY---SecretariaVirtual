@@ -7,7 +7,7 @@ from google.genai import types
 from adapters.gemini_client import gemini_client
 from adapters.gemini_models import GeminiResult
 from adapters.gemini_payments import consultar_estado_pago, iniciar_proceso_pago
-from adapters.gemini_inscription import registrar_inscripcion
+from adapters.gemini_inscription import registrar_solicitud_ingreso
 from services.inscripciones import consultar_deportista
 
 logger = logging.getLogger("boy.gemini.chat")
@@ -103,13 +103,11 @@ Cuando el usuario quiera inscribirse, recolecta estos datos UNO POR UNO en este 
 2. Número de documento
 3. Teléfono de contacto
 4. Fecha de nacimiento (formato YYYY-MM-DD)
-5. Experiencia en patinaje (pregunta abierta: "¿Ya tiene experiencia patinando?")
+5. Experiencia en patinaje: pregunta SOLO "¿Tiene experiencia patinando?" y espera que responda.
+   Si dice "sí", registra "si". Si dice "no", registra "no". Si dice "no sabe" o "no sé", registra "no_sabe".
+   NO intentes determinar el nivel. La experiencia solo es referencia para la secretaria.
 
-Si el usuario no responde claramente sobre experiencia o dice "no se",
-responde: "Ok, [nombre] te evaluará y determinará en qué grupo debes estar."
-y continúa con el flujo.
-
-Cuando tengas TODOS los datos, llama a la función registrar_inscripcion.
+Cuando tengas TODOS los datos, llama a la función registrar_solicitud_ingreso.
 
 CONSULTA DE DEPORTISTA:
 Cuando el usuario quiera saber su estado o info, pide el documento y llama a consultar_deportista.
@@ -130,8 +128,8 @@ Después de enviar las instrucciones, indica que puede enviar el comprobante por
 herramientas = [
     types.Tool(function_declarations=[
         types.FunctionDeclaration(
-            name="registrar_inscripcion",
-            description="Registra una preinscripción de matrícula cuando se tienen todos los datos del deportista.",
+            name="registrar_solicitud_ingreso",
+            description="Registra una solicitud de ingreso cuando se tienen todos los datos del aspirante. No asigna nivel ni genera pagos.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
@@ -139,7 +137,9 @@ herramientas = [
                     "documento": types.Schema(type=types.Type.STRING, description="Número de documento"),
                     "telefono": types.Schema(type=types.Type.STRING, description="Teléfono de contacto"),
                     "fecha_nacimiento": types.Schema(type=types.Type.STRING, description="Fecha YYYY-MM-DD"),
-                    "experiencia_patinaje": types.Schema(type=types.Type.STRING, description="Experiencia en patinaje del usuario"),
+                    "experiencia_reportada": types.Schema(type=types.Type.STRING, description="Experiencia: 'si', 'no', o 'no_sabe'"),
+                    "responsable_nombre": types.Schema(type=types.Type.STRING, description="Nombre del responsable (si es menor de edad)"),
+                    "responsable_whatsapp": types.Schema(type=types.Type.STRING, description="WhatsApp del responsable"),
                 },
                 required=["nombre", "documento", "telefono", "fecha_nacimiento"]
             )
@@ -197,9 +197,9 @@ class GeminiChatAdapter:
     def _ejecutar_funcion(self, fn_name: str, args: dict, 
                           club_id: Optional[str]) -> Optional[str]:
         """Ejecuta una funcion llamada por Gemini."""
-        if fn_name == "registrar_inscripcion" and club_id:
-            resultado = registrar_inscripcion(club_id=club_id, **args)
-            return resultado.get("mensaje", "Error al registrar inscripcion")
+        if fn_name == "registrar_solicitud_ingreso" and club_id:
+            resultado = registrar_solicitud_ingreso(club_id=club_id, **args)
+            return resultado.get("mensaje", "Error al registrar solicitud de ingreso")
         
         elif fn_name == "consultar_deportista" and club_id:
             resultado = consultar_deportista(club_id=club_id, **args)

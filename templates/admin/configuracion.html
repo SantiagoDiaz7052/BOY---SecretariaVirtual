@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}
+{% block title %}Configuración — BOY{% endblock %}
+{% block header_title %}Configuración del Club{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Configuración</h2>
+  <p>Parámetros generales del club de patinaje</p>
+</div>
+
+<div class="card" style="max-width: 640px;">
+  <div class="card-header"><h3>Parámetros generales</h3></div>
+  <div class="card-body">
+    <form class="config-form" onsubmit="event.preventDefault(); alert('Configuración guardada (simulado)')">
+      <div class="form-group">
+        <label for="llave_breb">Llave Bre-B</label>
+        <input type="text" id="llave_breb" value="{{ config.llave_breb }}" disabled>
+        <div class="form-hint">Número de cuenta para pagos por transferencia</div>
+      </div>
+      <div class="form-group">
+        <label for="monto_matricula">Monto matrícula</label>
+        <input type="number" id="monto_matricula" value="{{ config.monto_matricula }}" disabled>
+        <div class="form-hint">Valor de inscripción inicial para nuevos deportistas</div>
+      </div>
+      <div class="form-group">
+        <label for="recargo_mora">Recargo por mora</label>
+        <input type="number" id="recargo_mora" value="{{ config.recargo_mora }}" disabled>
+        <div class="form-hint">Recargo fijo aplicado después del día de corte</div>
+      </div>
+      <div class="form-group">
+        <label for="dias_recordatorio">Días de recordatorio</label>
+        <input type="number" id="dias_recordatorio" value="{{ config.dias_recordatorio }}" disabled>
+        <div class="form-hint">Días antes del vencimiento para enviar recordatorio</div>
+      </div>
+      <div class="form-group">
+        <label for="tolerancia_pago">Tolerancia de pago (días)</label>
+        <input type="number" id="tolerancia_pago" value="{{ config.tolerancia_pago }}" disabled>
+        <div class="form-hint">Días de gracia después del vencimiento antes de aplicar mora</div>
+      </div>
+      <button type="submit" class="btn btn-primary" disabled>Guardar cambios (próximamente)</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard — BOY{% endblock %}
+{% block header_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Panel de Control</h2>
+  <p>Resumen del club — {{ datos.fecha }}</p>
+</div>
+
+<div class="stats-grid">
+  <div class="card stat-card stat-primary">
+    <div class="stat-label">Solicitudes Pendientes</div>
+    <div class="stat-value">{{ datos.solicitudes_pendientes }}</div>
+    <div class="stat-footer">Pendientes de evaluación</div>
+  </div>
+  <div class="card stat-card stat-warning">
+    <div class="stat-label">Comprobantes</div>
+    <div class="stat-value">{{ datos.comprobantes_pendientes }}</div>
+    <div class="stat-footer">Por revisar</div>
+  </div>
+  <div class="card stat-card stat-success">
+    <div class="stat-label">Pagos Hoy</div>
+    <div class="stat-value">{{ datos.pagos_hoy }}</div>
+    <div class="stat-footer">${{ "{:,.0f}".format(datos.monto_hoy) }} COP</div>
+  </div>
+  <div class="card stat-card stat-success">
+    <div class="stat-label">Deportistas Activos</div>
+    <div class="stat-value">{{ datos.deportistas_activos }}</div>
+    <div class="stat-footer">Estado activo</div>
+  </div>
+  <div class="card stat-card stat-danger">
+    <div class="stat-label">Deportistas Inactivos</div>
+    <div class="stat-value">{{ datos.deportistas_inactivos }}</div>
+    <div class="stat-footer">Sin pago del mes</div>
+  </div>
+  <div class="card stat-card stat-danger">
+    <div class="stat-label">Mensualidades Vencidas</div>
+    <div class="stat-value">{{ datos.mensualidades_vencidas }}</div>
+    <div class="stat-footer">Pendientes de pago</div>
+  </div>
+  <div class="card stat-card stat-info">
+    <div class="stat-label">Tareas Pendientes</div>
+    <div class="stat-value">{{ datos.tareas_pendientes }}</div>
+    <div class="stat-footer">En la bandeja</div>
+  </div>
+  <div class="card stat-card stat-primary">
+    <div class="stat-label">Total Deportistas</div>
+    <div class="stat-value">{{ datos.total_deportistas }}</div>
+    <div class="stat-footer">Registrados en el club</div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+  <div class="card">
+    <div class="card-header"><h3>Últimas Solicitudes</h3></div>
+    <div class="card-body">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr><th>Nombre</th><th>Estado</th><th>Fecha</th></tr>
+          </thead>
+          <tbody>
+            {% for s in datos.ultimas_solicitudes %}
+            <tr>
+              <td>{{ s.nombre }}</td>
+              <td><span class="badge badge-{{ s.badge }}">{{ s.estado }}</span></td>
+              <td>{{ s.fecha }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Próximas Tareas</h3></div>
+    <div class="card-body">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr><th>Tipo</th><th>Persona</th><th>Prioridad</th></tr>
+          </thead>
+          <tbody>
+            {% for t in datos.proximas_tareas %}
+            <tr>
+              <td>{{ t.tipo }}</td>
+              <td>{{ t.persona }}</td>
+              <td><span class="priority-{{ t.priority_class }}">{{ t.prioridad }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

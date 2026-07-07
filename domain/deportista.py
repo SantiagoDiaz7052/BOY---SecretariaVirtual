@@ -19,11 +19,12 @@ class Deportista:
     """Entidad de dominio Deportista.
     
     Representa a un deportista registrado en el club.
-    El estado indica si tiene derecho a entrenar ese mes.
+    Se crea SOLO cuando la SolicitudIngreso llega a COMPLETADO.
     
     REGLAS:
-    - Un deportista INACTIVO no puede entrenar
-    - El nivel se asigna en matricula, admin puede modificar
+    - nivel es NULL hasta que secretaria lo asigna en el proceso de admision
+    - experiencia_reportada es solo referencia (NO determina nivel)
+    - Estado INACTIVO/ACTIVO indica derecho a entrenar el mes actual
     - Preparado para padres con varios hijos (responsable)
     - Asociado a una temporada
     """
@@ -31,7 +32,8 @@ class Deportista:
     temporada_id: str
     nombre: str
     documento: str
-    nivel: str = NivelDeportista.INICIACION.value
+    nivel: Optional[str] = None
+    experiencia_reportada: Optional[str] = None
     estado: str = EstadoDeportista.INACTIVO.value
     telefono: Optional[str] = None
     fecha_nacimiento: Optional[str] = None
@@ -49,7 +51,8 @@ class Deportista:
             temporada_id=data.get("temporada_id", ""),
             nombre=data["nombre"],
             documento=data["documento"],
-            nivel=data.get("nivel", NivelDeportista.INICIACION.value),
+            nivel=data.get("nivel"),
+            experiencia_reportada=data.get("experiencia_reportada"),
             estado=data.get("estado", EstadoDeportista.INACTIVO.value),
             telefono=data.get("telefono"),
             fecha_nacimiento=data.get("fecha_nacimiento"),
@@ -67,6 +70,7 @@ class Deportista:
             "nombre": self.nombre,
             "documento": self.documento,
             "nivel": self.nivel,
+            "experiencia_reportada": self.experiencia_reportada,
             "estado": self.estado,
             "telefono": self.telefono,
             "fecha_nacimiento": self.fecha_nacimiento,

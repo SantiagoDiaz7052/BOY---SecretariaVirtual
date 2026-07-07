@@ -1,0 +1,85 @@
+{% extends "admin/base.html" %}
+{% block title %}Tareas — BOY{% endblock %}
+{% block header_title %}Bandeja de Tareas{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Tareas Pendientes</h2>
+  <p>Acciones que requieren atención de la secretaria</p>
+</div>
+
+<div class="stats-grid" style="margin-bottom: 20px;">
+  <div class="card stat-card stat-primary">
+    <div class="stat-label">Evaluación</div>
+    <div class="stat-value">{{ stats.evaluacion }}</div>
+    <div class="stat-footer">Nuevos aspirantes</div>
+  </div>
+  <div class="card stat-card stat-warning">
+    <div class="stat-label">Comprobantes</div>
+    <div class="stat-value">{{ stats.comprobantes }}</div>
+    <div class="stat-footer">Por revisar</div>
+  </div>
+  <div class="card stat-card stat-info">
+    <div class="stat-label">Activaciones</div>
+    <div class="stat-value">{{ stats.activaciones }}</div>
+    <div class="stat-footer">Pendientes</div>
+  </div>
+  <div class="card stat-card stat-danger">
+    <div class="stat-label">Vencidas</div>
+    <div class="stat-value">{{ stats.vencidas }}</div>
+    <div class="stat-footer">Mensualidades</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>Todas las tareas</h3>
+    <div class="filters">
+      <select class="filter-select" data-filter="tipo">
+        <option value="">Todos los tipos</option>
+        <option value="evaluacion">Evaluación pendiente</option>
+        <option value="comprobante">Comprobante por revisar</option>
+        <option value="activacion">Activación pendiente</option>
+        <option value="vencida">Mensualidad vencida</option>
+      </select>
+      <select class="filter-select" data-filter="prioridad">
+        <option value="">Todas las prioridades</option>
+        <option value="alta">Alta</option>
+        <option value="media">Media</option>
+        <option value="baja">Baja</option>
+      </select>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="table-container">
+      <table class="filter-table">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Persona</th>
+            <th>Descripción</th>
+            <th>Fecha</th>
+            <th>Prioridad</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tareas %}
+          <tr>
+            <td data-col="tipo"><span class="badge badge-{{ t.badge }}">{{ t.tipo }}</span></td>
+            <td data-col="search"><strong>{{ t.persona }}</strong></td>
+            <td>{{ t.descripcion }}</td>
+            <td>{{ t.fecha }}</td>
+            <td data-col="prioridad"><span class="priority-{{ t.priority_class }}">{{ t.prioridad }}</span></td>
+            <td><span class="badge badge-{{ 'warning' if t.estado == 'pendiente' else 'muted' }}">{{ t.estado }}</span></td>
+            <td>
+              <button class="btn btn-primary btn-sm" disabled>Abrir</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
