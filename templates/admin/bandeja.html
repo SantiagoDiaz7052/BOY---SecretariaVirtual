@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% block title %}Bandeja — BOY{% endblock %}
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap">
+  <div>
+    <h2>📥 Bandeja de trabajo</h2>
+    <p>{{ total }} tareas pendientes</p>
+  </div>
+  <div class="bandeja-filters">
+    <button class="bf-btn active" data-filter="todas">Todas</button>
+    <button class="bf-btn" data-filter="evaluacion">🔴 Evaluación</button>
+    <button class="bf-btn" data-filter="comprobante">🟡 Comprobantes</button>
+    <button class="bf-btn" data-filter="activacion">🔵 Activación</button>
+    <button class="bf-btn" data-filter="vencida">🟠 Vencidas</button>
+  </div>
+</div>
+
+{% for grupo in grupos %}
+<div class="bandeja-section" data-type="{{ grupo.key }}">
+  <h4>{{ grupo.titulo }} <span class="count">{{ grupo.lista|length }}</span></h4>
+  {% if grupo.lista %}
+    {% for item in grupo.lista %}
+    <div class="action-card">
+      <span class="ac-dot" style="background:{{ item.color }}"></span>
+      <div>
+        <div class="ac-text">{{ item.texto }}</div>
+        <div class="ac-person">{{ item.persona }} · {{ item.detalle }}</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <span style="font-size:.72rem;color:var(--text-muted)">{{ item.hace }}</span>
+        <button class="btn btn-primary btn-sm" disabled>Resolver</button>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state" style="padding:20px;border:1px dashed var(--border);border-radius:8px;margin-bottom:8px">
+      <p>No hay {{ grupo.titulo|lower }}</p>
+    </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

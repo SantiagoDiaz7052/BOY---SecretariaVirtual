@@ -1,204 +1,242 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
 templates = Jinja2Templates(directory="templates")
 
 # ──────────────────────────────────────────────
-# Datos simulados (sin conexion a Supabase)
+# Helpers
 # ──────────────────────────────────────────────
+def _time_ago(dt: datetime) -> str:
+    diff = datetime.now() - dt
+    mins = int(diff.total_seconds() / 60)
+    if mins < 60:
+        return f"hace {mins} min" if mins > 1 else "ahora"
+    hrs = int(mins / 60)
+    if hrs < 24:
+        return f"hace {hrs}h"
+    days = int(hrs / 24)
+    return f"hace {days}d"
 
-MOCK_SOLICITUDES = [
-    {"id": "1", "nombre": "Laura Martínez", "documento": "1234567890", "telefono": "3001112233",
-     "fecha_nacimiento": "2015-03-12", "experiencia": "No", "nivel": None,
-     "estado": "Pendiente evaluación", "estado_raw": "pendiente_evaluacion",
-     "badge": "warning", "fecha": "2026-07-06", "fecha_creacion": "2026-07-06 10:30",
-     "responsable_nombre": "Ana Martínez", "responsable_documento": "987654321"},
-    {"id": "2", "nombre": "Carlos Pérez", "documento": "0987654321", "telefono": "3004445566",
-     "fecha_nacimiento": "2014-07-20", "experiencia": "Sí", "nivel": "Intermedio",
-     "estado": "Evaluado", "estado_raw": "evaluado",
-     "badge": "info", "fecha": "2026-07-05", "fecha_creacion": "2026-07-05 14:15",
-     "responsable_nombre": None, "responsable_documento": None},
-    {"id": "3", "nombre": "Sofía Ramírez", "documento": "1122334455", "telefono": "3007778899",
-     "fecha_nacimiento": "2016-01-05", "experiencia": "No sabe", "nivel": None,
-     "estado": "Pendiente evaluación", "estado_raw": "pendiente_evaluacion",
-     "badge": "warning", "fecha": "2026-07-04", "fecha_creacion": "2026-07-04 09:00",
-     "responsable_nombre": "Pedro Ramírez", "responsable_documento": "556677889"},
-    {"id": "4", "nombre": "Mateo López", "documento": "5544332211", "telefono": "3002223344",
-     "fecha_nacimiento": "2013-11-15", "experiencia": "Sí", "nivel": "Avanzado",
-     "estado": "Pendiente matrícula", "estado_raw": "pendiente_matricula",
-     "badge": "primary", "fecha": "2026-07-03", "fecha_creacion": "2026-07-03 16:45",
-     "responsable_nombre": None, "responsable_documento": None},
-    {"id": "5", "nombre": "Valentina Gómez", "documento": "9988776655", "telefono": "3008889900",
-     "fecha_nacimiento": "2015-09-28", "experiencia": "No", "nivel": "Iniciación",
-     "estado": "Completado", "estado_raw": "completado",
-     "badge": "success", "fecha": "2026-07-01", "fecha_creacion": "2026-06-28 11:00",
-     "responsable_nombre": "Luis Gómez", "responsable_documento": "1122334455"},
-]
 
-MOCK_TAREAS = [
-    {"id": "1", "tipo": "Evaluación pendiente", "badge": "primary", "persona": "Laura Martínez",
-     "descripcion": "Evaluar solicitud de ingreso", "fecha": "2026-07-06",
-     "prioridad": "Alta", "priority_class": "high", "estado": "pendiente"},
-    {"id": "2", "tipo": "Evaluación pendiente", "badge": "primary", "persona": "Sofía Ramírez",
-     "descripcion": "Evaluar solicitud de ingreso", "fecha": "2026-07-04",
-     "prioridad": "Alta", "priority_class": "high", "estado": "pendiente"},
-    {"id": "3", "tipo": "Comprobante por revisar", "badge": "warning", "persona": "Mateo López",
-     "descripcion": "Revisar comprobante de matrícula", "fecha": "2026-07-03",
-     "prioridad": "Media", "priority_class": "medium", "estado": "pendiente"},
-    {"id": "4", "tipo": "Activación pendiente", "badge": "info", "persona": "Valentina Gómez",
-     "descripcion": "Activar deportista tras pago de matrícula", "fecha": "2026-07-01",
-     "prioridad": "Media", "priority_class": "medium", "estado": "pendiente"},
-    {"id": "5", "tipo": "Mensualidad vencida", "badge": "danger", "persona": "Carlos Pérez",
-     "descripcion": "Mensualidad de junio sin pagar", "fecha": "2026-06-30",
-     "prioridad": "Baja", "priority_class": "low", "estado": "pendiente"},
-]
+def _saludo() -> str:
+    h = datetime.now().hour
+    if h < 12:
+        return "días"
+    elif h < 18:
+        return "tardes"
+    return "noches"
 
-MOCK_PAGOS = [
-    {"id": "1", "deportista": "Mateo López", "documento": "5544332211",
-     "concepto": "Matrícula", "monto": 50000, "metodo": "Nequi",
-     "estado": "Pendiente", "badge": "warning",
-     "fecha": "2026-07-03", "comprobante": "comp_001.jpg"},
-    {"id": "2", "deportista": "Valentina Gómez", "documento": "9988776655",
-     "concepto": "Matrícula", "monto": 50000, "metodo": "Efectivo",
-     "estado": "Aprobado", "badge": "success",
-     "fecha": "2026-06-30", "comprobante": "comp_002.jpg"},
-    {"id": "3", "deportista": "Carlos Pérez", "documento": "0987654321",
-     "concepto": "Mensualidad", "monto": 30000, "metodo": "Transferencia",
-     "estado": "En revisión", "badge": "info",
-     "fecha": "2026-07-05", "comprobante": "comp_003.jpg"},
-    {"id": "4", "deportista": "Laura Martínez", "documento": "1234567890",
-     "concepto": "Matrícula", "monto": 50000, "metodo": "Nequi",
-     "estado": "Rechazado", "badge": "danger",
-     "fecha": "2026-07-04", "comprobante": "comp_004.jpg"},
-    {"id": "5", "deportista": "Sofía Ramírez", "documento": "1122334455",
-     "concepto": "Matrícula", "monto": 25000, "metodo": "Efectivo",
-     "estado": "Parcial", "badge": "warning",
-     "fecha": "2026-07-04", "comprobante": None},
-]
-
-MOCK_DEPORTISTAS = [
-    {"id": "1", "nombre": "Valentina Gómez", "documento": "9988776655",
-     "categoria": "Infantil", "nivel": "Iniciación",
-     "estado": "Activo", "badge": "success",
-     "ultimo_pago": "2026-07-01", "telefono": "3008889900"},
-    {"id": "2", "nombre": "Carlos Pérez", "documento": "0987654321",
-     "categoria": "Juvenil", "nivel": "Intermedio",
-     "estado": "Inactivo", "badge": "danger",
-     "ultimo_pago": "2026-05-15", "telefono": "3004445566"},
-    {"id": "3", "nombre": "Sofía Ramírez", "documento": "1122334455",
-     "categoria": "Infantil", "nivel": None,
-     "estado": "Inactivo", "badge": "danger",
-     "ultimo_pago": None, "telefono": "3007778899"},
-]
-
-MOCK_CONCEPTOS = [
-    {"id": "1", "nombre": "Mensualidad", "monto": 30000,
-     "precios_por_nivel": {"iniciacion": 25000, "intermedio": 30000, "avanzado": 35000},
-     "recurrente": True, "automatico": True, "aplica_mora": True, "activo": True},
-    {"id": "2", "nombre": "Matrícula", "monto": 50000,
-     "precios_por_nivel": None,
-     "recurrente": False, "automatico": False, "aplica_mora": False, "activo": True},
-    {"id": "3", "nombre": "Uniforme", "monto": 80000,
-     "precios_por_nivel": None,
-     "recurrente": False, "automatico": False, "aplica_mora": False, "activo": True},
-    {"id": "4", "nombre": "Evento", "monto": 20000,
-     "precios_por_nivel": None,
-     "recurrente": False, "automatico": False, "aplica_mora": False, "activo": True},
-    {"id": "5", "nombre": "Licra", "monto": 15000,
-     "precios_por_nivel": None,
-     "recurrente": False, "automatico": False, "aplica_mora": False, "activo": False},
-]
-
-MOCK_CONFIG = {
-    "llave_breb": "3101234567",
-    "monto_matricula": 50000,
-    "recargo_mora": 5000,
-    "dias_recordatorio": 3,
-    "tolerancia_pago": 5,
-}
 
 # ──────────────────────────────────────────────
-# Rutas
+# Router principal
 # ──────────────────────────────────────────────
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    hoy = datetime.now()
-    datos = {
-        "fecha": hoy.strftime("%d %B %Y").capitalize(),
-        "solicitudes_pendientes": 3,
-        "comprobantes_pendientes": 2,
-        "pagos_hoy": 1,
-        "monto_hoy": 30000,
-        "deportistas_activos": 1,
-        "deportistas_inactivos": 2,
-        "mensualidades_vencidas": 1,
-        "tareas_pendientes": 5,
-        "total_deportistas": 3,
-        "ultimas_solicitudes": [
-            {"nombre": s["nombre"], "estado": s["estado"], "badge": s["badge"], "fecha": s["fecha"]}
-            for s in MOCK_SOLICITUDES[:3]
-        ],
-        "proximas_tareas": [
-            {"tipo": t["tipo"], "persona": t["persona"],
-             "prioridad": t["prioridad"], "priority_class": t["priority_class"]}
-            for t in MOCK_TAREAS[:3]
-        ],
-    }
-    return templates.TemplateResponse(
-        request, "admin/dashboard.html", {"datos": datos}
-    )
-
-
-@router.get("/solicitudes", response_class=HTMLResponse)
-async def solicitudes(request: Request):
-    return templates.TemplateResponse(
-        request, "admin/solicitudes.html", {"solicitudes": MOCK_SOLICITUDES}
-    )
-
-
-@router.get("/tareas", response_class=HTMLResponse)
-async def tareas(request: Request):
+    resumen = [
+        {"color": "red", "texto": "2 pagos por revisar"},
+        {"color": "orange", "texto": "3 evaluaciones"},
+        {"color": "green", "texto": "1 activación"},
+        {"color": "purple", "texto": "8 mensualidades vencidas"},
+    ]
+    acciones = [
+        {"color": "#ef4444", "texto": "Aprobar pago de Carlos Gómez", "persona": "Matrícula · $50,000"},
+        {"color": "#f59e0b", "texto": "Evaluar a Laura Martínez", "persona": "Nueva solicitud de ingreso"},
+        {"color": "#3b82f6", "texto": "Activar deportista Juan Pérez", "persona": "Matrícula pagada · Pendiente activación"},
+        {"color": "#f59e0b", "texto": "Revisar comprobante de Mateo López", "persona": "Matrícula · Nequi"},
+    ]
+    timeline = [
+        {"hora": "22:30", "dot_class": "success", "icono": "✅", "texto": "Valentina fue activada"},
+        {"hora": "22:28", "dot_class": "warning", "icono": "💳", "texto": "Carlos envió un comprobante"},
+        {"hora": "22:25", "dot_class": "primary", "icono": "📝", "texto": "Laura Martínez solicitó ingreso"},
+        {"hora": "22:12", "dot_class": "danger", "icono": "⚠️", "texto": "Mensualidad de Sofía vencida"},
+        {"hora": "21:50", "dot_class": "success", "icono": "✅", "texto": "Pago de Mateo aprobado"},
+        {"hora": "21:30", "dot_class": "warning", "icono": "💳", "texto": "Carlos envió comprobante"},
+    ]
     stats = {
-        "evaluacion": 2,
-        "comprobantes": 1,
-        "activaciones": 1,
-        "vencidas": 1,
+        "ingresos_hoy": "50,000",
+        "activos": 12,
+        "total_deportistas": 18,
+        "vencidas": 8,
+        "mora_acumulada": "240,000",
+        "tasa_cobro": 56,
     }
     return templates.TemplateResponse(
-        request, "admin/tareas.html", {"tareas": MOCK_TAREAS, "stats": stats}
+        request, "admin/dashboard.html", {
+            "saludo": _saludo(),
+            "resumen": resumen,
+            "acciones": acciones,
+            "timeline": timeline,
+            "stats": stats,
+        }
     )
 
 
-@router.get("/pagos", response_class=HTMLResponse)
-async def pagos(request: Request):
+@router.get("/bandeja", response_class=HTMLResponse)
+async def bandeja(request: Request):
+    items = [
+        {"tipo": "evaluacion", "color": "#ef4444", "texto": "Evaluar solicitud de ingreso",
+         "persona": "Laura Martínez", "detalle": "Nuevo aspirante · Sin experiencia",
+         "hace": "hace 10 min"},
+        {"tipo": "evaluacion", "color": "#ef4444", "texto": "Evaluar solicitud de ingreso",
+         "persona": "Sofía Ramírez", "detalle": "Nuevo aspirante · No sabe",
+         "hace": "hace 2h"},
+        {"tipo": "evaluacion", "color": "#ef4444", "texto": "Evaluar solicitud de ingreso",
+         "persona": "Pedro Gómez", "detalle": "Nuevo aspirante",
+         "hace": "hace 1d"},
+        {"tipo": "comprobante", "color": "#f59e0b", "texto": "Revisar comprobante de pago",
+         "persona": "Mateo López", "detalle": "Matrícula · $50,000 · Nequi",
+         "hace": "hace 30 min"},
+        {"tipo": "comprobante", "color": "#f59e0b", "texto": "Revisar comprobante de pago",
+         "persona": "Carlos Gómez", "detalle": "Mensualidad · $30,000 · Transferencia",
+         "hace": "hace 2h"},
+        {"tipo": "activacion", "color": "#3b82f6", "texto": "Activar deportista",
+         "persona": "Juan Pérez", "detalle": "Matrícula pagada · Pendiente activación",
+         "hace": "hace 1d"},
+        {"tipo": "vencida", "color": "#8b5cf6", "texto": "Mensualidad vencida",
+         "persona": "Sofía Ramírez", "detalle": "Mensualidad junio · $30,000",
+         "hace": "hace 3d"},
+        {"tipo": "vencida", "color": "#8b5cf6", "texto": "Mensualidad vencida",
+         "persona": "Carlos Pérez", "detalle": "Mensualidad junio · $30,000",
+         "hace": "hace 5d"},
+    ]
+    grupos = [
+        {"key": "evaluacion", "titulo": "🔴 Evaluación pendiente",
+         "lista": [i for i in items if i["tipo"] == "evaluacion"]},
+        {"key": "comprobante", "titulo": "🟡 Comprobante por revisar",
+         "lista": [i for i in items if i["tipo"] == "comprobante"]},
+        {"key": "activacion", "titulo": "🔵 Activación pendiente",
+         "lista": [i for i in items if i["tipo"] == "activacion"]},
+        {"key": "vencida", "titulo": "🟠 Mensualidad vencida",
+         "lista": [i for i in items if i["tipo"] == "vencida"]},
+    ]
     return templates.TemplateResponse(
-        request, "admin/pagos.html", {"pagos": MOCK_PAGOS}
+        request, "admin/bandeja.html", {"grupos": grupos, "total": len(items)}
     )
 
 
 @router.get("/deportistas", response_class=HTMLResponse)
 async def deportistas(request: Request):
+    lista = [
+        {"id": "1", "nombre": "Valentina Gómez", "documento": "9988776655",
+         "nivel": "Iniciación", "estado": "Activo", "badge": "success",
+         "ultimo_pago": "2026-07-01", "telefono": "3008889900"},
+        {"id": "2", "nombre": "Carlos Pérez", "documento": "0987654321",
+         "nivel": "Intermedio", "estado": "Inactivo", "badge": "danger",
+         "ultimo_pago": "2026-05-15", "telefono": "3004445566"},
+        {"id": "3", "nombre": "Sofía Ramírez", "documento": "1122334455",
+         "nivel": None, "estado": "Inactivo", "badge": "danger",
+         "ultimo_pago": None, "telefono": "3007778899"},
+        {"id": "4", "nombre": "Mateo López", "documento": "5544332211",
+         "nivel": "Avanzado", "estado": "Inactivo", "badge": "danger",
+         "ultimo_pago": None, "telefono": "3002223344"},
+        {"id": "5", "nombre": "Laura Martínez", "documento": "1234567890",
+         "nivel": None, "estado": "Inactivo", "badge": "danger",
+         "ultimo_pago": None, "telefono": "3001112233"},
+        {"id": "6", "nombre": "Juan Pérez", "documento": "5566778899",
+         "nivel": "Iniciación", "estado": "Inactivo", "badge": "danger",
+         "ultimo_pago": None, "telefono": "3005556677"},
+    ]
     return templates.TemplateResponse(
-        request, "admin/deportistas.html", {"deportistas": MOCK_DEPORTISTAS}
+        request, "admin/deportistas.html", {
+            "deportistas": lista,
+            "total": len(lista),
+            "activos": sum(1 for d in lista if d["estado"] == "Activo"),
+        }
     )
 
 
-@router.get("/conceptos", response_class=HTMLResponse)
-async def conceptos(request: Request):
+@router.get("/finanzas", response_class=HTMLResponse)
+async def finanzas(request: Request):
+    datos = {
+        "ingresos_hoy": "50,000",
+        "pagos_hoy": 1,
+        "ingresos_mes": "450,000",
+        "pagos_mes": 12,
+        "pagadas": 10,
+        "total_mensualidades": 18,
+        "pendientes": 8,
+        "monto_pendiente": "240,000",
+        "mora_acumulada": "240,000",
+        "vencidas": 8,
+        "tasa_cobro": 56,
+        "ultimos_pagos": [
+            {"deportista": "Mateo López", "concepto": "Matrícula", "monto": "50,000",
+             "estado": "Pendiente", "badge": "warning"},
+            {"deportista": "Valentina Gómez", "concepto": "Matrícula", "monto": "50,000",
+             "estado": "Aprobado", "badge": "success"},
+            {"deportista": "Carlos Pérez", "concepto": "Mensualidad", "monto": "30,000",
+             "estado": "En revisión", "badge": "info"},
+        ],
+        "conceptos": [
+            {"nombre": "Mensualidad", "monto": "30,000", "activo": True},
+            {"nombre": "Matrícula", "monto": "50,000", "activo": True},
+            {"nombre": "Uniforme", "monto": "80,000", "activo": True},
+            {"nombre": "Evento", "monto": "20,000", "activo": True},
+            {"nombre": "Licra", "monto": "15,000", "activo": False},
+        ],
+    }
     return templates.TemplateResponse(
-        request, "admin/conceptos.html", {"conceptos": MOCK_CONCEPTOS}
+        request, "admin/finanzas.html", {"datos": datos}
     )
 
 
 @router.get("/configuracion", response_class=HTMLResponse)
 async def configuracion(request: Request):
+    config = {
+        "llave_breb": "3101234567",
+        "monto_matricula": 50000,
+        "recargo_mora": 5000,
+        "dias_recordatorio": 3,
+        "tolerancia_pago": 5,
+    }
     return templates.TemplateResponse(
-        request, "admin/configuracion.html", {"config": MOCK_CONFIG}
+        request, "admin/configuracion.html", {"config": config}
     )
+
+
+# ──────────────────────────────────────────────
+# API endpoints (para JS)
+# ──────────────────────────────────────────────
+
+@router.get("/api/notificaciones")
+async def api_notificaciones():
+    ahora = datetime.now()
+    return [
+        {"id": "1", "icon": "💳", "text": "Carlos Gómez envió un comprobante",
+         "time": _time_ago(ahora - timedelta(minutes=2))},
+        {"id": "2", "icon": "📝", "text": "Nueva solicitud de Laura Martínez",
+         "time": _time_ago(ahora - timedelta(minutes=10))},
+        {"id": "3", "icon": "⚠️", "text": "Mensualidad de Sofía vencida",
+         "time": _time_ago(ahora - timedelta(hours=24))},
+        {"id": "4", "icon": "✅", "text": "Pago de Mateo aprobado",
+         "time": _time_ago(ahora - timedelta(hours=2))},
+    ]
+
+
+@router.get("/api/buscar")
+async def api_buscar(q: str = Query(min_length=2)):
+    db = [
+        {"id": "1", "nombre": "Valentina Gómez", "documento": "9988776655",
+         "nivel": "Iniciación", "estado": "Activo", "telefono": "3008889900"},
+        {"id": "2", "nombre": "Carlos Pérez", "documento": "0987654321",
+         "nivel": "Intermedio", "estado": "Inactivo", "telefono": "3004445566"},
+        {"id": "3", "nombre": "Sofía Ramírez", "documento": "1122334455",
+         "nivel": None, "estado": "Inactivo", "telefono": "3007778899"},
+        {"id": "4", "nombre": "Mateo López", "documento": "5544332211",
+         "nivel": "Avanzado", "estado": "Inactivo", "telefono": "3002223344"},
+        {"id": "5", "nombre": "Laura Martínez", "documento": "1234567890",
+         "nivel": None, "estado": "Inactivo", "telefono": "3001112233"},
+        {"id": "6", "nombre": "Juan Pérez", "documento": "5566778899",
+         "nivel": "Iniciación", "estado": "Inactivo", "telefono": "3005556677"},
+    ]
+    ql = q.lower()
+    results = [
+        d for d in db
+        if ql in d["nombre"].lower() or ql in d["documento"] or ql in d.get("telefono", "")
+    ]
+    return results[:8]

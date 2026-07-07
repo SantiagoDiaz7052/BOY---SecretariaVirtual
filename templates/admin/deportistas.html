@@ -1,18 +1,17 @@
 {% extends "admin/base.html" %}
 {% block title %}Deportistas — BOY{% endblock %}
-{% block header_title %}Deportistas{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Deportistas</h2>
-  <p>Registro de deportistas del club</p>
+  <h2>👥 Deportistas</h2>
+  <p>{{ total }} deportistas registrados · {{ activos }} activos</p>
 </div>
 
 <div class="card">
   <div class="card-header">
-    <h3>Listado de deportistas</h3>
+    <h3>Listado</h3>
     <div class="filters">
       <select class="filter-select" data-filter="estado">
-        <option value="">Todos los estados</option>
+        <option value="">Todos</option>
         <option value="activo">Activo</option>
         <option value="inactivo">Inactivo</option>
       </select>
@@ -22,7 +21,7 @@
         <option value="intermedio">Intermedio</option>
         <option value="avanzado">Avanzado</option>
       </select>
-      <input type="text" class="search-input filter-search" placeholder="Buscar nombre o documento..." data-filter="search">
+      <input type="text" class="search-input filter-search" placeholder="Buscar..." data-filter="search">
     </div>
   </div>
   <div class="card-body">
@@ -32,12 +31,10 @@
           <tr>
             <th>Nombre</th>
             <th>Documento</th>
-            <th>Categoría</th>
             <th>Nivel</th>
             <th>Estado</th>
             <th>Último pago</th>
             <th>Teléfono</th>
-            <th>Acción</th>
           </tr>
         </thead>
         <tbody>
@@ -45,14 +42,10 @@
           <tr>
             <td data-col="search"><strong>{{ d.nombre }}</strong></td>
             <td data-col="search">{{ d.documento }}</td>
-            <td>{{ d.categoria }}</td>
             <td data-col="nivel">{{ d.nivel or '—' }}</td>
             <td data-col="estado"><span class="badge badge-{{ d.badge }}">{{ d.estado }}</span></td>
             <td>{{ d.ultimo_pago or '—' }}</td>
             <td>{{ d.telefono }}</td>
-            <td>
-              <button class="btn btn-sm btn-ghost" disabled>Editar</button>
-            </td>
           </tr>
           {% endfor %}
         </tbody>

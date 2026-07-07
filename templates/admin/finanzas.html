@@ -1,0 +1,84 @@
+{% extends "admin/base.html" %}
+{% block title %}Finanzas — BOY{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>💰 Finanzas</h2>
+  <p>Resumen financiero del club</p>
+</div>
+
+<div class="finanzas-grid">
+  <div class="card fin-card">
+    <div class="fin-label">Ingresos hoy</div>
+    <div class="fin-value">${{ datos.ingresos_hoy }}</div>
+    <div class="fin-sub">{{ datos.pagos_hoy }} pagos</div>
+  </div>
+  <div class="card fin-card">
+    <div class="fin-label">Ingresos del mes</div>
+    <div class="fin-value">${{ datos.ingresos_mes }}</div>
+    <div class="fin-sub">{{ datos.pagos_mes }} pagos</div>
+  </div>
+  <div class="card fin-card">
+    <div class="fin-label">Mensualidades pagadas</div>
+    <div class="fin-value">{{ datos.pagadas }}</div>
+    <div class="fin-sub">de {{ datos.total_mensualidades }}</div>
+  </div>
+  <div class="card fin-card">
+    <div class="fin-label">Pendientes</div>
+    <div class="fin-value">{{ datos.pendientes }}</div>
+    <div class="fin-sub">${{ datos.monto_pendiente }} por cobrar</div>
+  </div>
+  <div class="card fin-card">
+    <div class="fin-label">Mora acumulada</div>
+    <div class="fin-value">${{ datos.mora_acumulada }}</div>
+    <div class="fin-sub">{{ datos.vencidas }} mensualidades vencidas</div>
+  </div>
+  <div class="card fin-card">
+    <div class="fin-label">Tasa de cobro</div>
+    <div class="fin-value">{{ datos.tasa_cobro }}%</div>
+    <div class="fin-sub">{{ datos.pagadas }} de {{ datos.total_mensualidades }}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+  <div class="card">
+    <div class="card-header"><h3>Últimos pagos</h3></div>
+    <div class="card-body">
+      <div class="table-container">
+        <table>
+          <thead><tr><th>Deportista</th><th>Concepto</th><th>Monto</th><th>Estado</th></tr></thead>
+          <tbody>
+            {% for p in datos.ultimos_pagos %}
+            <tr>
+              <td>{{ p.deportista }}</td>
+              <td>{{ p.concepto }}</td>
+              <td>${{ p.monto }}</td>
+              <td><span class="badge badge-{{ p.badge }}">{{ p.estado }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Conceptos</h3></div>
+    <div class="card-body">
+      <div class="table-container">
+        <table>
+          <thead><tr><th>Nombre</th><th>Monto base</th><th>Activo</th></tr></thead>
+          <tbody>
+            {% for c in datos.conceptos %}
+            <tr>
+              <td>{{ c.nombre }}</td>
+              <td>${{ c.monto }}</td>
+              <td><span class="badge badge-{{ 'success' if c.activo else 'muted' }}">{{ 'Activo' if c.activo else 'Inactivo' }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

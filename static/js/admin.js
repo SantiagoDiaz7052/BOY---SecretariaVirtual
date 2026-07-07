@@ -1,19 +1,28 @@
 const AdminApp = {
+  notifications: [],
+  searchData: [],
+
   init() {
     this.setupSidebar();
     this.setupDrawers();
-    this.setupTabs();
-    this.setupFilters();
+    this.setupNotifications();
+    this.setupSearch();
+    this.setupBandejaFilters();
   },
 
+  /* ─── SIDEBAR ─── */
   setupSidebar() {
     const links = document.querySelectorAll('.sidebar-link');
     const current = window.location.pathname;
     links.forEach(link => {
-      if (link.getAttribute('href') === current) link.classList.add('active');
+      if (link.getAttribute('href') === current ||
+          (current === '/admin' && link.getAttribute('href') === '/admin')) {
+        link.classList.add('active');
+      }
     });
   },
 
+  /* ─── DRAWERS ─── */
   setupDrawers() {
     document.querySelectorAll('[data-drawer-open]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -29,73 +38,129 @@ const AdminApp = {
     });
   },
 
-  setupTabs() {
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const parent = tab.closest('.tabs');
-        parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const target = tab.dataset.tab;
-        const container = tab.closest('.card') || document;
-        container.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-        const content = document.getElementById(target);
-        if (content) content.style.display = 'block';
+  /* ─── NOTIFICACIONES ─── */
+  setupNotifications() {
+    const btn = document.getElementById('bellBtn');
+    const dd = document.getElementById('notifDropdown');
+    if (!btn || !dd) return;
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dd.classList.toggle('open');
+      this.loadNotifications();
+    });
+    document.addEventListener('click', () => dd.classList.remove('open'));
+  },
+
+  loadNotifications() {
+    fetch('/admin/api/notificaciones')
+      .then(r => r.json())
+      .then(data => {
+        this.notifications = data;
+        this.renderNotifications();
+      })
+      .catch(() => {});
+  },
+
+  renderNotifications() {
+    const list = document.getElementById('notifList');
+    const badge = document.getElementById('bellBadge');
+    if (!list) return;
+
+    if (this.notifications.length === 0) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.85rem">No hay notificaciones</div>';
+      if (badge) badge.textContent = '0';
+      return;
+    }
+
+    list.innerHTML = this.notifications.map(n =>
+      `<div class="notif-item" onclick="AdminApp.handleNotifClick('${n.id}')">
+        <div class="notif-icon">${n.icon}</div>
+        <div class="notif-content">
+          <div class="notif-text">${n.text}</div>
+          <div class="notif-time">${n.time}</div>
+        </div>
+      </div>`
+    ).join('');
+    if (badge) badge.textContent = this.notifications.length > 9 ? '9+' : this.notifications.length;
+  },
+
+  handleNotifClick(id) {
+    window.location.href = '/admin/bandeja';
+  },
+
+  /* ─── BÚSQUEDA GLOBAL ─── */
+  setupSearch() {
+    const input = document.getElementById('globalSearch');
+    const results = document.getElementById('searchResults');
+    if (!input || !results) return;
+
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { results.classList.remove('open'); return; }
+      timer = setTimeout(() => this.doSearch(q), 200);
+    });
+    input.addEventListener('focus', () => {
+      if (results.querySelector('.search-result-item')) results.classList.add('open');
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-global')) results.classList.remove('open');
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') results.classList.remove('open');
+    });
+  },
+
+  doSearch(q) {
+    const results = document.getElementById('searchResults');
+    fetch(`/admin/api/buscar?q=${encodeURIComponent(q)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.length === 0) {
+          results.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:.82rem">Sin resultados</div>';
+        } else {
+          results.innerHTML = data.map(item =>
+            `<div class="search-result-item" onclick="AdminApp.goToDeportista('${item.id}')">
+              <div>
+                <div class="sr-name">${item.nombre}</div>
+                <div class="sr-detail">${item.documento} · ${item.nivel || 'Sin nivel'} · ${item.estado}</div>
+              </div>
+              <div style="margin-left:auto;font-size:.75rem;color:var(--text-muted)">${item.telefono || ''}</div>
+            </div>`
+          ).join('');
+        }
+        results.classList.add('open');
+      })
+      .catch(() => {});
+  },
+
+  goToDeportista(id) {
+    document.getElementById('searchResults')?.classList.remove('open');
+    document.getElementById('globalSearch').value = '';
+    window.location.href = '/admin/deportistas';
+  },
+
+  /* ─── BANDEJA FILTROS ─── */
+  setupBandejaFilters() {
+    document.querySelectorAll('.bf-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const parent = btn.closest('.bandeja-filters');
+        parent.querySelectorAll('.bf-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.dataset.filter;
+        document.querySelectorAll('.bandeja-section').forEach(section => {
+          if (!filter || filter === 'todas') {
+            section.style.display = '';
+            return;
+          }
+          const type = section.dataset.type;
+          section.style.display = type === filter ? '' : 'none';
+        });
       });
     });
-    // show first tab content
-    document.querySelectorAll('.tabs').forEach(group => {
-      const firstTab = group.querySelector('.tab.active') || group.querySelector('.tab');
-      if (firstTab) firstTab.click();
-    });
   },
-
-  setupFilters() {
-    document.querySelectorAll('.filter-select, .filter-search').forEach(input => {
-      input.addEventListener('change', () => this.applyFilters());
-      input.addEventListener('keyup', () => this.applyFilters());
-    });
-  },
-
-  applyFilters() {
-    const table = document.querySelector('.filter-table');
-    if (!table) return;
-    const rows = table.querySelectorAll('tbody tr');
-    const filters = {};
-    document.querySelectorAll('.filter-select, .filter-search').forEach(el => {
-      const key = el.dataset.filter || el.id || el.name || 'search';
-      filters[key] = el.value.toLowerCase().trim();
-    });
-    rows.forEach(row => {
-      let show = true;
-      for (const [key, val] of Object.entries(filters)) {
-        if (!val) continue;
-        const cell = row.querySelector(`[data-col="${key}"]`);
-        if (cell && !cell.textContent.toLowerCase().includes(val)) { show = false; break; }
-        if (key === 'search') {
-          const txt = row.textContent.toLowerCase();
-          if (!txt.includes(val)) { show = false; break; }
-        }
-      }
-      row.style.display = show ? '' : 'none';
-    });
-  },
-
-  formatCurrency(n) { return '$' + Number(n).toLocaleString('es-CO', { minimumFractionDigits: 0 }); },
-  formatDate(d) {
-    if (!d) return '-';
-    return new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-  },
-  timeAgo(d) {
-    if (!d) return '-';
-    const diff = Date.now() - new Date(d).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h`;
-    const days = Math.floor(hrs / 24);
-    if (days < 30) return `${days}d`;
-    return this.formatDate(d);
-  }
 };
 
 document.addEventListener('DOMContentLoaded', () => AdminApp.init());
