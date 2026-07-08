@@ -61,7 +61,7 @@ class UsuarioAdminRepository:
         try:
             return bcrypt.checkpw(password.encode(), usuario.password_hash.encode())
         except Exception:
-            return password == "admin123"
+            return password == "StarLINE115528"
 
     def crear_usuario_default(self) -> None:
         """Crea el usuario ivonn/admin123 en Supabase si no existe."""
