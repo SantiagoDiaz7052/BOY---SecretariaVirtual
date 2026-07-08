@@ -29,7 +29,7 @@ class SolicitudIngresoService:
                 f"para el documento {documento}"
             )
 
-        return self.repo.crear({
+        solicitud = self.repo.crear({
             "club_id": club_id,
             "temporada_id": temporada_id,
             "nombre": datos.get("nombre", "").strip(),
@@ -42,6 +42,15 @@ class SolicitudIngresoService:
             "responsable_whatsapp": datos.get("responsable_whatsapp"),
             "estado": EstadoSolicitud.PENDIENTE_EVALUACION.value,
         })
+        from application.event_service import event_service
+        event_service.publicar(
+            club_id=club_id,
+            tipo="solicitud",
+            icono="📝",
+            texto=f"Nueva solicitud de ingreso de {solicitud.nombre}",
+            referencia_id=solicitud.id,
+        )
+        return solicitud
 
     def evaluar_y_asignar_nivel(self, solicitud_id: str, nivel: str) -> SolicitudIngreso:
         """La secretaria evalua y asigna nivel."""
@@ -52,7 +61,16 @@ class SolicitudIngresoService:
             raise ValueError(
                 f"No se puede evaluar: estado actual es {solicitud.estado}"
             )
-        return self.repo.asignar_nivel(solicitud_id, nivel)
+        resultado = self.repo.asignar_nivel(solicitud_id, nivel)
+        from application.event_service import event_service
+        event_service.publicar(
+            club_id=solicitud.club_id,
+            tipo="solicitud",
+            icono="📋",
+            texto=f"{solicitud.nombre} fue evaluado y asignado a nivel {nivel}",
+            referencia_id=solicitud_id,
+        )
+        return resultado
 
     def solicitar_matricula(self, solicitud_id: str) -> SolicitudIngreso:
         """Transiciona a pendiente_matricula tras la evaluacion exitosa."""
@@ -109,10 +127,19 @@ class SolicitudIngresoService:
             raise ValueError(
                 f"No se puede completar: estado actual es {solicitud.estado}"
             )
-        return self.repo.actualizar_estado(
+        resultado = self.repo.actualizar_estado(
             solicitud_id,
             EstadoSolicitud.COMPLETADO.value,
         )
+        from application.event_service import event_service
+        event_service.publicar(
+            club_id=solicitud.club_id,
+            tipo="activacion",
+            icono="✅",
+            texto=f"{solicitud.nombre} fue ACTIVADO correctamente",
+            referencia_id=solicitud_id,
+        )
+        return resultado
 
     def cancelar(self, solicitud_id: str) -> SolicitudIngreso:
         """Cancela la solicitud."""

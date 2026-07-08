@@ -30,12 +30,14 @@ def registrar_solicitud_ingreso(club_id: str, nombre: str, documento: str,
     FLUJO:
     1. Obtiene temporada activa
     2. Crea SolicitudIngreso (sin asignar nivel, sin crear pagos)
-    3. Retorna mensaje: "seras evaluado por [profesor]"
+    3. Crea tarea de evaluacion y publica notificacion al panel
+    4. Retorna mensaje: "seras evaluado por [profesor]"
     """
     try:
         from application.solicitud_ingreso_service import SolicitudIngresoService
         from application.temporada_service import TemporadaService
         from application.tarea_service import TareaService
+        from application.event_service import event_service
 
         solicitud_service = SolicitudIngresoService()
         temporada_service = TemporadaService()
@@ -85,7 +87,16 @@ def registrar_solicitud_ingreso(club_id: str, nombre: str, documento: str,
             nombre=solicitud.nombre,
         )
 
-        # 5. Construir mensaje
+        # 5. Publicar notificacion al panel administrativo
+        event_service.publicar(
+            club_id=club_id,
+            tipo="solicitud",
+            icono="📝",
+            texto=f"Nueva solicitud de ingreso de {solicitud.nombre}",
+            referencia_id=solicitud.id,
+        )
+
+        # 6. Construir mensaje
         mensaje = (
             f"¡Gracias {nombre}! Tu solicitud de ingreso ha sido registrada.\n\n"
             f"{nombre_profesor} te evaluará y te asignará el grupo correspondiente. "

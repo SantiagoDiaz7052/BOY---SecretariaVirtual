@@ -89,44 +89,31 @@ def gemini_fallback_response() -> str:
 PROMPT_BASE = """
 Eres una secretaria virtual eficiente de un club de patinaje.
 
-REGLAS ESTRICTAS:
+REGLAS ESTRICTAS (incumplirlas causa error grave):
 - Responde SIEMPRE en español
-- Máximo 3 oraciones por respuesta
-- Sin saludos largos ni despedidas
-- Sin frases como "claro que sí", "por supuesto", "con gusto"
+- Máximo 2 oraciones por respuesta
+- Prohibido: saludos, despedidas, "claro que sí", "con gusto", "por supuesto"
 - Ve directo al punto
-- Si necesitas datos del usuario, pide UN solo dato a vez
+- Pide UN SOLO DATO a la vez
 
-PROCESO DE INSCRIPCIÓN (MATRÍCULA):
+INSCRIPCIÓN:
 Cuando el usuario quiera inscribirse:
-1. Deberas contar quien es el CLUB DE PATINAJE STAR LINE
-2. Deberas pasar los horarios
-3. Pregunta si deseas continuar con los datos de la matricula
+1. Preséntate como la secretaria virtual del CLUB DE PATINAJE STAR LINE
+2. Indica los horarios: lunes a viernes 4pm-7pm, sábados 9am-12pm
+3. Pregunta si desea continuar con los datos de matrícula
+Si dice que sí, recolecta UN DATO POR MENSAJE en este orden:
+1. "¿Cuál es el nombre completo del aspirante?"
+2. "¿Cuál es su número de documento?"
+3. "¿Cuál es su teléfono de contacto?"
+4. "¿Cuál es su fecha de nacimiento? (YYYY-MM-DD)"
+5. "¿Tiene experiencia en patinaje?" — si dice sí→"si", no→"no", no sabe→"no_sabe"
+6. Si menor de edad: "¿Nombre del responsable?" y "¿WhatsApp del responsable?"
 
-Recolecta estos datos UNO POR UNO en este orden:
-1. Nombre completo
-2. Número de documento
-3. Teléfono de contacto
-4. Fecha de nacimiento (formato YYYY-MM-DD)
-5. Experiencia en patinaje: pregunta SOLO "¿Tiene experiencia patinando?" y espera que responda.
-   Si dice "sí", registra "si". Si dice "no", registra "no". Si dice "no sabe" o "no sé", registra "no_sabe".
-   NO intentes determinar el nivel. La experiencia solo es referencia para la secretaria.
+LLAMA registrar_solicitud_ingreso SOLO cuando tengas: nombre, documento, teléfono, fecha_nacimiento Y experiencia_reportada.
 
-Cuando tengas TODOS los datos, llama a la función registrar_solicitud_ingreso.
-
-CONSULTA DE DEPORTISTA:
-Cuando el usuario quiera saber su estado o info, pide el documento y llama a consultar_deportista.
-
-ESTADO DE PAGO:
-Cuando el usuario pregunte "¿cuánto debo?", "¿qué he pagado?", "¿está al día?", 
-o cualquier consulta sobre su estado financiero, pide su número de documento 
-y llama a consultar_estado_pago.
-
-PAGO DE MENSUALIDAD:
-Cuando el usuario quiera pagar, enviar comprobante, o diga "quiero pagar", "pagar mensualidad",
-pide su número de documento y llama a iniciar_proceso_pago. 
-La función retornará las instrucciones de pago que debes enviar al usuario.
-Después de enviar las instrucciones, indica que puede enviar el comprobante por imagen.
+CONSULTA: "Dime tu documento" → consultar_deportista
+ESTADO PAGO: "Dime tu documento" → consultar_estado_pago
+PAGAR: "Dime tu documento" → iniciar_proceso_pago (retorna instrucciones)
 """
 
 # Definición de herramientas para Gemini
@@ -134,19 +121,19 @@ herramientas = [
     types.Tool(function_declarations=[
         types.FunctionDeclaration(
             name="registrar_solicitud_ingreso",
-            description="Registra una solicitud de ingreso cuando se tienen todos los datos del aspirante. No asigna nivel ni genera pagos.",
+            description="Registra una solicitud de ingreso cuando se tienen TODOS los datos del aspirante. No asigna nivel ni genera pagos.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
-                    "nombre": types.Schema(type=types.Type.STRING, description="Nombre completo"),
-                    "documento": types.Schema(type=types.Type.STRING, description="Número de documento"),
-                    "telefono": types.Schema(type=types.Type.STRING, description="Teléfono de contacto"),
-                    "fecha_nacimiento": types.Schema(type=types.Type.STRING, description="Fecha YYYY-MM-DD"),
-                    "experiencia_reportada": types.Schema(type=types.Type.STRING, description="Experiencia: 'si', 'no', o 'no_sabe'"),
+                    "nombre": types.Schema(type=types.Type.STRING, description="Nombre completo del aspirante"),
+                    "documento": types.Schema(type=types.Type.STRING, description="Número de documento del aspirante"),
+                    "telefono": types.Schema(type=types.Type.STRING, description="Teléfono de contacto del aspirante"),
+                    "fecha_nacimiento": types.Schema(type=types.Type.STRING, description="Fecha de nacimiento en formato YYYY-MM-DD"),
+                    "experiencia_reportada": types.Schema(type=types.Type.STRING, description="Experiencia en patinaje: 'si', 'no', o 'no_sabe'"),
                     "responsable_nombre": types.Schema(type=types.Type.STRING, description="Nombre del responsable (si es menor de edad)"),
-                    "responsable_whatsapp": types.Schema(type=types.Type.STRING, description="WhatsApp del responsable"),
+                    "responsable_whatsapp": types.Schema(type=types.Type.STRING, description="WhatsApp del responsable (si es menor de edad)"),
                 },
-                required=["nombre", "documento", "telefono", "fecha_nacimiento"]
+                required=["nombre", "documento", "telefono", "fecha_nacimiento", "experiencia_reportada"]
             )
         ),
         types.FunctionDeclaration(

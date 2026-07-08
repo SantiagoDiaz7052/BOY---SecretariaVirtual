@@ -114,6 +114,16 @@ class WhatsAppAppService:
             proceso["id"], imagen_url
         )
 
+        # Notificar al panel
+        from application.event_service import event_service
+        event_service.publicar(
+            club_id=club_id,
+            tipo="pago",
+            icono="💳",
+            texto=f"{deportista_nombre} envió un comprobante de pago",
+            referencia_id=proceso["id"],
+        )
+
         # 4. Analizar con Gemini Vision
         analisis = gemini_vision.analizar_imagen(imagen_url, monto_sugerido=monto_esperado)
 
@@ -239,6 +249,15 @@ class WhatsAppAppService:
         if pago.data:
             self.proceso_service.registrar_pago_creado(
                 proceso["id"], pago.data[0]["id"]
+            )
+            # Notificar al panel
+            from application.event_service import event_service
+            event_service.publicar(
+                club_id=club_id,
+                tipo="pago",
+                icono="✅",
+                texto=f"Pago de {deportista_nombre} registrado y pendiente de verificación",
+                referencia_id=pago.data[0]["id"],
             )
 
         return {
