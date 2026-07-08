@@ -1,0 +1,41 @@
+{% extends "admin/base.html" %}
+{% block title %}Historial — BOY{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>📈 Historial de actividad</h2>
+  <p>Registro cronológico de todo lo que ocurre en el club</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>Línea de tiempo</h3>
+    <div class="filters">
+      <select class="filter-select" data-filter="tipo">
+        <option value="">Todos</option>
+        <option value="solicitud">Solicitudes</option>
+        <option value="pago">Pagos</option>
+        <option value="activacion">Activaciones</option>
+        <option value="sistema">Sistema</option>
+      </select>
+      <input type="text" class="search-input filter-search" placeholder="Buscar..." data-filter="search">
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="timeline" style="padding:0">
+      {% for entry in historial %}
+      <div class="timeline-item">
+        <div class="timeline-dot {{ entry.color }}"></div>
+        <div class="timeline-time">{{ entry.hora }}</div>
+        <div class="timeline-text" data-col="search">
+          <span data-col="tipo">{{ entry.icono }}</span>
+          {{ entry.texto }}
+          {% if entry.usuario %}
+          <span style="color:var(--text-muted);font-size:.75rem">— {{ entry.usuario }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -2,15 +2,18 @@
 {% block title %}Inicio — BOY{% endblock %}
 {% block content %}
 <div class="greeting">
-  <h2>Buenos {{ saludo }}, Ivonn 👋</h2>
-  <div class="sub">Hoy tienes trabajo pendiente por aquí</div>
-  <div class="action-summary">
+  <h2>Buenos {{ saludo }}, {{ nombre }} 👋</h2>
+  <div class="sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span>Hoy tienes:</span>
     {% for item in resumen %}
-    <div class="as-item">
-      <span class="as-dot {{ item.color }}"></span>
+    <span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);padding:2px 10px;border-radius:20px;font-size:.8rem">
+      <span class="as-dot {{ item.color }}" style="width:6px;height:6px"></span>
       {{ item.texto }}
-    </div>
+    </span>
     {% endfor %}
+  </div>
+  <div style="margin-top:10px;font-size:.78rem;color:var(--text-muted)">
+    ⚪ Última sincronización: hace {{ ultima_sincronizacion }}
   </div>
 </div>
 

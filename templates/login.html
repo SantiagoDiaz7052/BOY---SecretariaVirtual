@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingresar — BOY</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font); background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .container { max-width: 400px; width: 100%; }
+    .logo { text-align: center; font-size: 2rem; font-weight: 800; letter-spacing: -.03em; margin-bottom: 32px; }
+    .logo span { color: var(--primary); }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
+    }
+    .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 4px; }
+    .card .desc { color: var(--text-muted); font-size: .85rem; margin-bottom: 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: .8rem; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
+    .form-group input[type="text"],
+    .form-group input[type="password"] {
+      width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: .9rem; font-family: var(--font);
+      transition: border-color .15s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--primary); }
+    .btn {
+      width: 100%; padding: 12px; border-radius: 8px; font-size: .9rem; font-weight: 600;
+      border: none; cursor: pointer; transition: all .15s; font-family: var(--font);
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .error-msg {
+      background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3);
+      color: var(--danger); padding: 10px 14px; border-radius: 8px;
+      font-size: .82rem; margin-bottom: 16px; display: none;
+    }
+    .checkbox-group {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+    }
+    .checkbox-group input[type="checkbox"] {
+      width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer;
+    }
+    .checkbox-group label { font-size: .82rem; color: var(--text-muted); cursor: pointer; }
+    .back-link { display: block; text-align: center; margin-top: 16px; }
+    .back-link a { color: var(--text-muted); font-size: .82rem; text-decoration: none; }
+    .back-link a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">BOY<span>.</span></div>
+    <div class="card">
+      <h2>Ingresar</h2>
+      <div class="desc">Panel Administrativo — Secretaría Virtual</div>
+
+      {% if error %}
+      <div class="error-msg" style="display:block">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/login">
+        <div class="form-group">
+          <label for="username">Usuario</label>
+          <input type="text" id="username" name="username" placeholder="ivonn" required autofocus>
+        </div>
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" placeholder="••••••••" required>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="recordarme" name="recordarme">
+          <label for="recordarme">Recordarme por 7 días</label>
+        </div>
+        <button type="submit" class="btn btn-primary">Ingresar</button>
+      </form>
+
+      <div class="back-link">
+        <a href="/">&larr; Volver al inicio</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

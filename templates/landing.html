@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOY — Secretaría Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --card: #1e293b;
+      --border: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font); background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .container { max-width: 500px; width: 100%; text-align: center; }
+    .logo { font-size: 2.5rem; font-weight: 800; letter-spacing: -.03em; margin-bottom: 4px; }
+    .logo span { color: var(--primary); }
+    .subtitle { color: var(--text-muted); font-size: .95rem; margin-bottom: 40px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px; margin-bottom: 16px;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 32px; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      border: none; cursor: pointer; text-decoration: none; transition: all .15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .btn-outline {
+      background: transparent; color: var(--text); border: 1px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--text-muted); }
+    .status-row {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px; border-radius: 10px; background: var(--card);
+      border: 1px solid var(--border); font-size: .85rem; margin-top: 16px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 8px rgba(16,185,129,.4); }
+    .status-dot.offline { background: var(--danger); }
+    .footer { color: var(--text-muted); font-size: .75rem; margin-top: 32px; }
+    .version { color: var(--text-muted); font-size: .8rem; margin-top: 8px; }
+    .links { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
+    .links a { color: var(--text-muted); font-size: .8rem; text-decoration: none; }
+    .links a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">BOY<span>.</span></div>
+    <div class="subtitle">Secretaría Virtual del Club de Patinaje</div>
+
+    <div class="card">
+      <div style="font-size:1.1rem;font-weight:600;margin-bottom:6px">Panel Administrativo</div>
+      <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:24px">
+        Gestión de solicitudes, pagos, deportistas y más
+      </p>
+      <a href="/login" class="btn btn-primary">
+        Ingresar al Panel
+      </a>
+      <div class="status-row">
+        <span class="status-dot online"></span>
+        <span>Sistema operativo</span>
+        <span style="color:var(--success);font-weight:600">Online</span>
+      </div>
+    </div>
+
+    <div class="version">Versión 2.1</div>
+
+    <div class="links">
+      <a href="/health">Estado del servidor</a>
+    </div>
+
+    <div class="footer">
+      &copy; {{ year }} Club de Patinaje &mdash; Secretaría Virtual BOY
+    </div>
+  </div>
+</body>
+</html>

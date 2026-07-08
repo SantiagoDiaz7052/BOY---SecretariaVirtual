@@ -28,9 +28,15 @@
       <a href="/admin/finanzas" class="sidebar-link">
         <span class="icon">💰</span><span>Finanzas</span>
       </a>
+      <a href="/admin/historial" class="sidebar-link">
+        <span class="icon">📈</span><span>Historial</span>
+      </a>
       <div class="sidebar-section">Sistema</div>
+      <a href="/admin/sistema" class="sidebar-link">
+        <span class="icon">⚙️</span><span>Sistema</span>
+      </a>
       <a href="/admin/configuracion" class="sidebar-link">
-        <span class="icon">⚙️</span><span>Configuración</span>
+        <span class="icon">🔧</span><span>Configuración</span>
       </a>
     </nav>
   </aside>
@@ -50,6 +56,8 @@
             <div id="notifList"></div>
           </div>
         </div>
+        <span style="font-size:.8rem;color:var(--text-muted)">{{ session.get('nombre', 'Ivonn') }}</span>
+        <a href="/logout" class="btn btn-sm btn-ghost" style="color:var(--text-muted)">Salir</a>
       </div>
     </header>
     <div class="content">

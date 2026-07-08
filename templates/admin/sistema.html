@@ -1,0 +1,80 @@
+{% extends "admin/base.html" %}
+{% block title %}Sistema — BOY{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>⚙️ Sistema</h2>
+  <p>Estado de los servicios y configuración del sistema</p>
+</div>
+
+<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:600;font-size:.9rem">Servidor Web</div>
+      <span class="badge badge-success">🟢 Online</span>
+    </div>
+    <div style="font-size:.8rem;color:var(--text-muted)">
+      <div>Plataforma: {{ sistema.servidor.plataforma }}</div>
+      <div>Uptime: {{ sistema.servidor.uptime }}</div>
+      <div>Versión: {{ sistema.servidor.version }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:600;font-size:.9rem">Gemini API</div>
+      {% if sistema.gemini.online %}
+      <span class="badge badge-success">🟢 Disponible</span>
+      {% else %}
+      <span class="badge badge-danger">🔴 Caído</span>
+      {% endif %}
+    </div>
+    <div style="font-size:.8rem;color:var(--text-muted)">
+      <div>Modelo: {{ sistema.gemini.modelo }}</div>
+      <div>Fallback: {{ sistema.gemini.fallback }}</div>
+      <div>Último error: {{ sistema.gemini.ultimo_error or 'Ninguno' }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:600;font-size:.9rem">Supabase</div>
+      {% if sistema.supabase.online %}
+      <span class="badge badge-success">🟢 Conectado</span>
+      {% else %}
+      <span class="badge badge-danger">🔴 Desconectado</span>
+      {% endif %}
+    </div>
+    <div style="font-size:.8rem;color:var(--text-muted)">
+      <div>Proyecto: {{ sistema.supabase.proyecto or '—' }}</div>
+      <div>Registros: {{ sistema.supabase.registros }}</div>
+      <div>Último backup: {{ sistema.supabase.ultimo_backup }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:600;font-size:.9rem">WhatsApp Webhook</div>
+      <span class="badge badge-success">🟢 Activo</span>
+    </div>
+    <div style="font-size:.8rem;color:var(--text-muted)">
+      <div>Último mensaje recibido: {{ sistema.whatsapp.ultimo_mensaje }}</div>
+      <div>Mensajes hoy: {{ sistema.whatsapp.mensajes_hoy }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px;max-width:600px">
+  <div class="card-header"><h3>Información del sistema</h3></div>
+  <div class="card-body">
+    <table>
+      <tbody>
+        <tr><td style="font-weight:500;width:180px">Versión</td><td>{{ sistema.version }}</td></tr>
+        <tr><td style="font-weight:500">Entorno</td><td>{{ sistema.entorno }}</td></tr>
+        <tr><td style="font-weight:500">Python</td><td>{{ sistema.python_version }}</td></tr>
+        <tr><td style="font-weight:500">FastAPI</td><td>{{ sistema.fastapi_version }}</td></tr>
+        <tr><td style="font-weight:500">Último deploy</td><td>{{ sistema.ultimo_deploy }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
