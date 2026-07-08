@@ -169,8 +169,13 @@ class SistemaViewModel:
         "plataforma": "Render", "uptime": "—", "version": "2.1.0"
     })
     gemini: dict = field(default_factory=lambda: {
-        "online": False, "modelo": "gemini-2.5-flash-lite",
-        "fallback": "gemini-2.5-flash", "ultimo_error": None
+        "online": False,
+        "modelo_principal": "gemini-2.5-flash-lite",
+        "modelo_fallback1": "gemini-2.5-flash",
+        "modelo_fallback2": "gemini-2.0-flash",
+        "ultimo_error": None,
+        "errores_503_hoy": 0,
+        "tiempo_respuesta_ms": None,
     })
     supabase: dict = field(default_factory=lambda: {
         "online": False, "proyecto": "boy-secretaria",

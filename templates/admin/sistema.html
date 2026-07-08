@@ -29,8 +29,11 @@
       {% endif %}
     </div>
     <div style="font-size:.8rem;color:var(--text-muted)">
-      <div>Modelo: {{ sistema.gemini.modelo }}</div>
-      <div>Fallback: {{ sistema.gemini.fallback }}</div>
+      <div>Modelo principal: {{ sistema.gemini.modelo_principal }}</div>
+      <div>Fallback 1: {{ sistema.gemini.modelo_fallback1 }}</div>
+      <div>Fallback 2: {{ sistema.gemini.modelo_fallback2 or '—' }}</div>
+      <div>Respuesta: {{ sistema.gemini.tiempo_respuesta_ms or '—' }} ms</div>
+      <div>Errores 503 hoy: {{ sistema.gemini.errores_503_hoy or 0 }}</div>
       <div>Último error: {{ sistema.gemini.ultimo_error or 'Ninguno' }}</div>
     </div>
   </div>

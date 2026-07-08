@@ -310,21 +310,35 @@ class DashboardService:
         import sys
         import fastapi
         import os
+        import time
         vm = SistemaViewModel()
         vm.python_version = sys.version.split()[0]
         vm.fastapi_version = fastapi.__version__
         vm.entorno = "Producción" if os.getenv("RENDER") else "Desarrollo"
         try:
             from services.supabase_client import supabase
+            supabase.table("_health").select("1").limit(1).execute()
             vm.supabase["online"] = True
         except Exception:
             vm.supabase["online"] = False
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
-            vm.gemini["online"] = True
-        except Exception:
+            from google import genai
+            from google.genai import types
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key:
+                client = genai.Client(api_key=api_key)
+                t0 = time.time()
+                resp = client.models.generate_content(
+                    model="gemini-2.5-flash-lite",
+                    contents="responde solo: ok",
+                    config=types.GenerateContentConfig(max_output_tokens=5),
+                )
+                elapsed = int((time.time() - t0) * 1000)
+                vm.gemini["online"] = resp and resp.text
+                vm.gemini["tiempo_respuesta_ms"] = elapsed
+        except Exception as e:
             vm.gemini["online"] = False
+            vm.gemini["ultimo_error"] = str(e)[:120]
         vm.whatsapp["ultimo_mensaje"] = "—"
         vm.whatsapp["mensajes_hoy"] = 0
         vm.servidor["version"] = "2.1.0"

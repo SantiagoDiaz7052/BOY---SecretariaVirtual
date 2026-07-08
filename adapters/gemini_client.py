@@ -17,18 +17,26 @@ logger = logging.getLogger("boy.gemini")
 
 class GeminiClient:
     """Cliente resiliente para Gemini.
-    
+
     Caracteristicas:
     - Reintentos con backoff exponencial + jitter para 503
+    - Cadena de fallback: flash-lite -> flash -> 2.0-flash -> 1.5-flash
     - Manejo de timeouts y errores de red
     - Logging completo de errores
     - Nunca lanza excepciones al caller
     """
+
+    MAX_RETRIES = 3
+    BASE_DELAY = 2
+    MAX_DELAY = 20
     
-    MAX_RETRIES = 5
-    BASE_DELAY = 3  # segundos base
-    MAX_DELAY = 30  # delay maximo
-    
+    FALLBACK_CHAIN = [
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+    ]
+
     def __init__(self):
         self._client = None
     
@@ -82,24 +90,25 @@ class GeminiClient:
             f"[GEMINI_STACKTRACE] {traceback.format_exc()}"
         )
     
-    def generate_content(self, model: str, contents: list, 
+    def generate_content(self, model: str, contents: list,
                          config: Optional[types.GenerateContentConfig] = None,
                          context: str = "general",
                          fallback_model: Optional[str] = None) -> GeminiResult:
-        """Genera contenido con reintentos y manejo de errores.
-        
+        """Genera contenido con reintentos y cadena de fallback de modelos.
+
         Args:
-            model: Modelo de Gemini a usar
+            model: Modelo de Gemini a usar primero
             contents: Lista de Content objects
             config: Configuracion generativa
             context: Contexto para logs (ej: "vision", "chat")
-            fallback_model: Modelo alternativo si el principal falla con 503
-        
+            fallback_model: Modelo alternativo (deprecated, usa FALLBACK_CHAIN)
+
         Returns:
             GeminiResult con success=True o success=False
         """
         last_exception = None
-        
+        used_fallback = False
+
         for attempt in range(self.MAX_RETRIES):
             try:
                 response = self.client.models.generate_content(
@@ -107,27 +116,25 @@ class GeminiClient:
                     contents=contents,
                     config=config,
                 )
-                
-                # Verificar que la respuesta tenga candidates
+
                 if not response.candidates:
                     return GeminiResult.fail(
                         error_type="EMPTY_RESPONSE",
                         message="Gemini devolvio respuesta vacia",
                         retries_used=attempt,
                     )
-                
+
                 return GeminiResult.ok(
                     data=response,
                     raw_response=response.text if response.text else None,
                     retries_used=attempt,
                 )
-                
+
             except ServerError as e:
                 last_exception = e
                 error_type = self._classify_error(e)
                 self._log_error(e, error_type, context, attempt)
-                
-                # Reintentar solo en 503 y 429
+
                 if error_type in ("SERVICE_UNAVAILABLE", "RATE_LIMITED"):
                     if attempt < self.MAX_RETRIES - 1:
                         delay = self._delay_for_retry(attempt)
@@ -137,20 +144,24 @@ class GeminiClient:
                         )
                         time.sleep(delay)
                         continue
-                    # Si agota reintentos y hay fallback, intentar con ese
-                    elif fallback_model and model != fallback_model:
+
+                # Si agota reintentos, probar siguiente modelo en cadena
+                if not used_fallback:
+                    current_idx = self.FALLBACK_CHAIN.index(model) if model in self.FALLBACK_CHAIN else -1
+                    if current_idx >= 0 and current_idx < len(self.FALLBACK_CHAIN) - 1:
+                        next_model = self.FALLBACK_CHAIN[current_idx + 1]
                         logger.info(
-                            f"[GEMINI_FALLBACK] Probando modelo alternativo: {fallback_model}"
+                            f"[GEMINI_FALLBACK] Modelo {model} fallo. "
+                            f"Probando siguiente: {next_model}"
                         )
+                        used_fallback = True
                         return self.generate_content(
-                            model=fallback_model,
+                            model=next_model,
                             contents=contents,
                             config=config,
                             context=context,
-                            fallback_model=None,  # Sin fallback adicional
                         )
-                
-                # Otros errores del servidor no se reintentan
+
                 return GeminiResult.fail(
                     error_type=error_type,
                     message="Estoy teniendo un problema temporal. Por favor, intenta preguntar de nuevo.",

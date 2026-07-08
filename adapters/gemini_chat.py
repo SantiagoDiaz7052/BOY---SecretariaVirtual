@@ -74,7 +74,7 @@ class CircuitBreaker:
             return False
 
 # Instancia global del circuit breaker
-_circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60)
+_circuit_breaker = CircuitBreaker(failure_threshold=2, recovery_timeout=120)
 
 
 def gemini_fallback_response() -> str:
@@ -265,13 +265,12 @@ class GeminiChatAdapter:
             tools=herramientas,
         )
         
-        # Llamar a Gemini con reintentos
+        # Llamar a Gemini con reintentos y cadena de fallback
         resultado = gemini_client.generate_content(
             model="gemini-2.5-flash-lite",
             contents=contents,
             config=config,
             context="chat",
-            fallback_model="gemini-2.5-flash",
         )
         
         # Actualizar circuit breaker segun resultado
