@@ -47,6 +47,17 @@ class CircuitBreaker:
 
 _cb = CircuitBreaker()
 
+_client = None
+
+def _cliente():
+    global _client
+    if _client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY no configurada")
+        _client = genai.Client(api_key=api_key)
+    return _client
+
 # ──────────────────────────────
 # ESTADO POR CONVERSACIÓN
 # ──────────────────────────────
@@ -72,12 +83,6 @@ def _leer_historial(numero):
 # ──────────────────────────────
 # GEMINI
 # ──────────────────────────────
-
-def _cliente():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY no configurada")
-    return genai.Client(api_key=api_key)
 
 
 def gemini_generar(contents, config, intento=0):
