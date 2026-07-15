@@ -63,103 +63,6 @@ def _cliente():
     return _client
 
 # ──────────────────────────────
-# SUPABASE - PROMPT
-# ──────────────────────────────
-
-PROMPT_DEFAULT = """
-Eres BOY, la secretaria virtual del CLUB DE PATINAJE STAR LINE.
-
-PERSONALIDAD:
-- Responde siempre en español, con energía y actitud
-- Sin rodeos, ve al grano
-- Trata a los padres con respeto pero sin arrastrarte
-- Usa emojis ocasionalmente
-- Máximo 3 oraciones por respuesta
-
-INFORMACIÓN DEL CLUB:
-- Ubicaciones: Girardot y Melgar
-- Edades: desde 3 años hasta adultos
-- Profesora: Ivonn
-
-INSCRIPCIÓN:
-Si el usuario quiere inscribirse:
-1. Pregunta la edad del niño
-2. Según la edad, explica el grupo correspondiente:
-   - 3-5 años → iniciación (motricidad, juegos)
-   - 6-12 años → intermedio (técnica básica, pruebas)
-   - 13+ años → avanzado (competitivo, alto rendimiento)
-3. Pregunta si quiere más información o si tiene alguna duda
-NO registres nada en el sistema. Solo informa.
-
-Si el usuario se pone grosero o insiste con temas que no manejas, responde:
-"Comunicaré a Ivonn para que te contacte. Escribe *10* y la llamo."
-"""
-
-_prompt_cache = {"valor": None, "ts": 0}
-
-def _cargar_prompt():
-    ahora = time.time()
-    if _prompt_cache["valor"] and ahora - _prompt_cache["ts"] < 300:
-        return _prompt_cache["valor"]
-    try:
-        from db import supabase
-        if not supabase:
-            return PROMPT_DEFAULT
-        r = supabase.table("configuracion").select("valor").eq("id", "system_prompt").execute()
-        if r.data and len(r.data) > 0:
-            _prompt_cache["valor"] = r.data[0]["valor"]
-            _prompt_cache["ts"] = ahora
-            return _prompt_cache["valor"]
-    except Exception as e:
-        logger.warning(f"[PROMPT] Error cargando de Supabase: {e}")
-    return PROMPT_DEFAULT
-
-# ──────────────────────────────
-# SUPABASE - MEMORIA
-# ──────────────────────────────
-
-def _guardar_mensaje(numero, rol, contenido):
-    try:
-        from db import supabase
-        if supabase:
-            supabase.table("conversaciones").insert({
-                "numero": numero,
-                "rol": rol,
-                "contenido": contenido,
-            }).execute()
-    except Exception as e:
-        logger.warning(f"[MEMORIA] Error guardando: {e}")
-
-def _leer_historial(numero, limite=6):
-    try:
-        from db import supabase
-        if not supabase:
-            return []
-        r = (supabase.table("conversaciones")
-             .select("rol,contenido")
-             .eq("numero", numero)
-             .order("created_at", desc=True)
-             .limit(limite)
-             .execute())
-        if r.data:
-            return list(reversed(r.data))
-    except Exception as e:
-        logger.warning(f"[MEMORIA] Error leyendo: {e}")
-    return []
-
-# ──────────────────────────────
-# ESTADO POR CONVERSACIÓN
-# ──────────────────────────────
-
-_estado = {}
-
-def _guardar_estado(numero, estado):
-    _estado[numero] = estado
-
-def _leer_estado(numero):
-    return _estado.pop(numero, None)
-
-# ──────────────────────────────
 # GEMINI - GENERAR
 # ──────────────────────────────
 
@@ -191,6 +94,185 @@ def gemini_generar(contents, config):
             return {"ok": False, "error": str(e)}
     return {"ok": False, "error": "max_intentos"}
 
+# ──────────────────────────────
+# SUPABASE - PROMPT
+# ──────────────────────────────
+
+PROMPT_DEFAULT = """
+Eres BOY, el asistente virtual del STAR CLUB DEPORTIVO.
+
+PERSONALIDAD:
+- Responde siempre en español, con energía y actitud
+- Sin rodeos, ve al grano
+- Trata a los padres con respeto pero sin arrastrarte
+- Usa emojis ocasionalmente
+- Sé breve y claro
+
+MENÚ PRINCIPAL - Cuando el usuario escriba "hola", "menú" o algo similar, presenta las opciones:
+
+📲 *STAR CLUB DEPORTIVO* 🛼💙
+¡Hola! 👋 Soy *Boy*, tu asistente virtual ✨
+Estoy aquí para ayudarte 💙
+Escribe el número de la opción que necesitas 👇
+
+1️⃣ Quiénes somos
+2️⃣ Horarios y sedes
+3️⃣ Copa StarX3
+4️⃣ Uniformes y tienda
+5️⃣ Pagos y mensualidades
+6️⃣ Área de deportistas
+7️⃣ Próximos eventos
+8️⃣ Preguntas frecuentes
+9️⃣ Redes sociales
+🔟 Hablar con una persona
+
+INFORMACIÓN DEL CLUB:
+- Star Club Deportivo, fundado en 2013
+- Afiliado a Liga de Patinaje de Cundinamarca y Federación Colombiana de Patinaje
+- Sedes: Girardot y Melgar
+- Niños desde 3 años
+- Profesora: Ivonn
+
+INSCRIPCIÓN:
+- Inscripción anual: $50.000
+- Sede Melgar (Escuela): $90.000/mes, 4 veces por semana
+- Sede Girardot:
+  • Iniciación: $90.000/mes, 3 veces por semana
+  • Intermedio: $100.000/mes, 5 veces por semana
+  • Avanzado: $110.000/mes, 9 jornadas por semana
+
+HORARIOS - Cuando pregunten por horarios:
+- Pregunta primero: ¿Girardot o Melgar? ¿Y qué nivel?
+- Luego envía la imagen correspondiente
+
+Si el usuario elige una opción del menú, responde con la información de esa sección.
+Si el usuario se pone grosero o insiste con temas que no manejas, responde:
+"Comunicaré a Ivonn para que te contacte. Escribe *10* y la llamo."
+"""
+
+_prompt_cache = {"valor": None, "ts": 0}
+
+def _cargar_prompt():
+    ahora = time.time()
+    if _prompt_cache["valor"] and ahora - _prompt_cache["ts"] < 300:
+        return _prompt_cache["valor"]
+    try:
+        from db import supabase
+        if not supabase:
+            return PROMPT_DEFAULT
+        r = supabase.table("configuracion").select("valor").eq("id", "system_prompt").execute()
+        if r.data and len(r.data) > 0:
+            _prompt_cache["valor"] = r.data[0]["valor"]
+            _prompt_cache["ts"] = ahora
+            return _prompt_cache["valor"]
+    except Exception as e:
+        logger.warning(f"[PROMPT] Error cargando de Supabase: {e}")
+    return PROMPT_DEFAULT
+
+# ──────────────────────────────
+# SUPABASE - MEMORIA + RESÚMENES
+# ──────────────────────────────
+
+MAX_MENSAJES = 8
+UMBRAL_RESUMEN = 8
+
+def _guardar_mensaje(numero, rol, contenido):
+    try:
+        from db import supabase
+        if supabase:
+            supabase.table("conversaciones").insert({
+                "numero": numero,
+                "rol": rol,
+                "contenido": contenido,
+            }).execute()
+    except Exception as e:
+        logger.warning(f"[MEMORIA] Error guardando: {e}")
+
+def _contar_mensajes(numero):
+    try:
+        from db import supabase
+        if not supabase:
+            return 0
+        r = supabase.table("conversaciones").select("id", count="exact").eq("numero", numero).execute()
+        return r.count or 0
+    except Exception:
+        return 0
+
+def _leer_historial(numero, limite=8):
+    try:
+        from db import supabase
+        if not supabase:
+            return []
+        r = (supabase.table("conversaciones")
+             .select("rol,contenido")
+             .eq("numero", numero)
+             .order("created_at", desc=True)
+             .limit(limite)
+             .execute())
+        if r.data:
+            return list(reversed(r.data))
+    except Exception as e:
+        logger.warning(f"[MEMORIA] Error leyendo: {e}")
+    return []
+
+def _leer_resumen(numero):
+    try:
+        from db import supabase
+        if not supabase:
+            return None
+        r = (supabase.table("resumenes")
+             .select("contenido")
+             .eq("numero", numero)
+             .order("created_at", desc=True)
+             .limit(1)
+             .execute())
+        if r.data and len(r.data) > 0:
+            return r.data[0]["contenido"]
+    except Exception as e:
+        logger.warning(f"[RESUMEN] Error leyendo: {e}")
+    return None
+
+def _crear_resumen(numero):
+    try:
+        from db import supabase
+        if not supabase:
+            return
+        mensajes = _leer_historial(numero, limite=20)
+        if len(mensajes) < UMBRAL_RESUMEN:
+            return
+        texto = "\n".join([f"{m['rol']}: {m['contenido']}" for m in mensajes])
+        resp = _cliente().models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=f"Resume esta conversación en 2-3 oraciones. Sé conciso:\n\n{texto}",
+            config=types.GenerateContentConfig(
+                system_instruction="Eres un asistente que resume conversaciones. Solo d el resumen, nada más.",
+                max_output_tokens=150,
+                temperature=0.3,
+            ),
+        )
+        resumen = (resp.text or "").strip()
+        if resumen:
+            supabase.table("resumenes").insert({
+                "numero": numero,
+                "contenido": resumen,
+            }).execute()
+            supabase.table("conversaciones").delete().eq("numero", numero).execute()
+            logger.info(f"[RESUMEN] Creado para {numero}")
+    except Exception as e:
+        logger.warning(f"[RESUMEN] Error creando: {e}")
+
+def _obtener_contexto(numero):
+    resumen = _leer_resumen(numero)
+    mensajes = _leer_historial(numero, limite=8)
+    historial = []
+    if resumen:
+        historial.append({"rol": "system", "contenido": f"Resumen de conversación anterior: {resumen}"})
+    historial.extend(mensajes)
+    return historial
+
+# ──────────────────────────────
+# CHAT
+# ──────────────────────────────
 
 def gemini_chat(historial, mensaje):
     if not _cb.disponible():
@@ -200,13 +282,17 @@ def gemini_chat(historial, mensaje):
 
     contents = []
     for m in historial:
-        role = "user" if m["rol"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=m["contenido"])]))
+        if m["rol"] == "system":
+            contents.append(types.Content(role="user", parts=[types.Part(text=m["contenido"])]))
+            contents.append(types.Content(role="model", parts=[types.Part(text="Entendido, tengo el contexto.")]))
+        else:
+            role = "user" if m["rol"] == "user" else "model"
+            contents.append(types.Content(role=role, parts=[types.Part(text=m["contenido"])]))
     contents.append(types.Content(role="user", parts=[types.Part(text=mensaje)]))
 
     config = types.GenerateContentConfig(
         system_instruction=prompt,
-        max_output_tokens=300,
+        max_output_tokens=500,
         temperature=0.7,
     )
 
@@ -256,6 +342,18 @@ def clasificar_nivel(mensaje):
         return None
 
 # ──────────────────────────────
+# ESTADO POR CONVERSACIÓN
+# ──────────────────────────────
+
+_estado = {}
+
+def _guardar_estado(numero, estado):
+    _estado[numero] = estado
+
+def _leer_estado(numero):
+    return _estado.pop(numero, None)
+
+# ──────────────────────────────
 # WEBHOOK
 # ──────────────────────────────
 
@@ -286,11 +384,15 @@ async def webhook_whatsapp(request: Request):
                 respuesta = "¿Qué horario te gustaría saber? 📍\n• Girardot: iniciación, intermedio o avanzado\n• Melgar"
                 _guardar_estado(numero, "esperando_horario")
             else:
-                historial = _leer_historial(numero)
+                historial = _obtener_contexto(numero)
                 respuesta = gemini_chat(historial, texto)
 
         _guardar_mensaje(numero, "user", texto)
         _guardar_mensaje(numero, "model", respuesta)
+
+        total = _contar_mensajes(numero)
+        if total >= UMBRAL_RESUMEN:
+            _crear_resumen(numero)
 
     except Exception as e:
         logger.error(f"[WEBHOOK] Error: {e}", exc_info=True)
