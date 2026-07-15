@@ -47,6 +47,10 @@ class CircuitBreaker:
 
 _cb = CircuitBreaker()
 
+# ──────────────────────────────
+# GEMINI (cliente singleton)
+# ──────────────────────────────
+
 _client = None
 
 def _cliente():
@@ -59,63 +63,10 @@ def _cliente():
     return _client
 
 # ──────────────────────────────
-# ESTADO POR CONVERSACIÓN
+# SUPABASE - PROMPT
 # ──────────────────────────────
 
-_conversaciones = {}
-_historial = {}
-
-def _guardar_estado(numero, estado):
-    _conversaciones[numero] = estado
-
-def _leer_estado(numero):
-    return _conversaciones.pop(numero, None)
-
-def _agregar_mensaje(numero, rol, contenido):
-    if numero not in _historial:
-        _historial[numero] = []
-    _historial[numero].append({"role": rol, "content": contenido})
-    _historial[numero] = _historial[numero][-6:]
-
-def _leer_historial(numero):
-    return _historial.get(numero, [])
-
-# ──────────────────────────────
-# GEMINI
-# ──────────────────────────────
-
-
-def gemini_generar(contents, config, intento=0):
-    max_intentos = 3
-    modelos = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
-    for i in range(max_intentos):
-        modelo = modelos[0] if i == 0 else modelos[-1]
-        try:
-            resp = _cliente().models.generate_content(model=modelo, contents=contents, config=config)
-            if resp.candidates:
-                return {"ok": True, "data": resp}
-            logger.error(f"[GEMINI] Sin candidates en respuesta: {resp}")
-            return {"ok": False, "error": "sin_candidates"}
-        except ServerError as e:
-            err = str(e)
-            logger.warning(f"[GEMINI] ServerError en {modelo}: {err}")
-            if "503" in err or "UNAVAILABLE" in err:
-                if "gemini-2.5-flash" not in modelo:
-                    continue
-            if i < max_intentos - 1:
-                time.sleep(min(2 * (2 ** i), 10))
-                continue
-            return {"ok": False, "error": err}
-        except Exception as e:
-            logger.error(f"[GEMINI] Excepción en {modelo}: {type(e).__name__}: {e}")
-            if i < max_intentos - 1:
-                time.sleep(2)
-                continue
-            return {"ok": False, "error": str(e)}
-    return {"ok": False, "error": "max_intentos"}
-
-
-PROMPT = """
+PROMPT_DEFAULT = """
 Eres BOY, la secretaria virtual del CLUB DE PATINAJE STAR LINE.
 
 PERSONALIDAD:
@@ -144,20 +95,117 @@ Si el usuario se pone grosero o insiste con temas que no manejas, responde:
 "Comunicaré a Ivonn para que te contacte. Escribe *10* y la llamo."
 """
 
+_prompt_cache = {"valor": None, "ts": 0}
+
+def _cargar_prompt():
+    ahora = time.time()
+    if _prompt_cache["valor"] and ahora - _prompt_cache["ts"] < 300:
+        return _prompt_cache["valor"]
+    try:
+        from db import supabase
+        if not supabase:
+            return PROMPT_DEFAULT
+        r = supabase.table("configuracion").select("valor").eq("id", "system_prompt").execute()
+        if r.data and len(r.data) > 0:
+            _prompt_cache["valor"] = r.data[0]["valor"]
+            _prompt_cache["ts"] = ahora
+            return _prompt_cache["valor"]
+    except Exception as e:
+        logger.warning(f"[PROMPT] Error cargando de Supabase: {e}")
+    return PROMPT_DEFAULT
+
+# ──────────────────────────────
+# SUPABASE - MEMORIA
+# ──────────────────────────────
+
+def _guardar_mensaje(numero, rol, contenido):
+    try:
+        from db import supabase
+        if supabase:
+            supabase.table("conversaciones").insert({
+                "numero": numero,
+                "rol": rol,
+                "contenido": contenido,
+            }).execute()
+    except Exception as e:
+        logger.warning(f"[MEMORIA] Error guardando: {e}")
+
+def _leer_historial(numero, limite=6):
+    try:
+        from db import supabase
+        if not supabase:
+            return []
+        r = (supabase.table("conversaciones")
+             .select("rol,contenido")
+             .eq("numero", numero)
+             .order("created_at", desc=True)
+             .limit(limite)
+             .execute())
+        if r.data:
+            return list(reversed(r.data))
+    except Exception as e:
+        logger.warning(f"[MEMORIA] Error leyendo: {e}")
+    return []
+
+# ──────────────────────────────
+# ESTADO POR CONVERSACIÓN
+# ──────────────────────────────
+
+_estado = {}
+
+def _guardar_estado(numero, estado):
+    _estado[numero] = estado
+
+def _leer_estado(numero):
+    return _estado.pop(numero, None)
+
+# ──────────────────────────────
+# GEMINI - GENERAR
+# ──────────────────────────────
+
+def gemini_generar(contents, config):
+    max_intentos = 3
+    modelos = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    for i in range(max_intentos):
+        modelo = modelos[0] if i == 0 else modelos[-1]
+        try:
+            resp = _cliente().models.generate_content(model=modelo, contents=contents, config=config)
+            if resp.candidates:
+                return {"ok": True, "data": resp}
+            return {"ok": False, "error": "sin_candidates"}
+        except ServerError as e:
+            err = str(e)
+            logger.warning(f"[GEMINI] {modelo}: {err}")
+            if "503" in err or "UNAVAILABLE" in err:
+                if "gemini-2.5-flash" not in modelo:
+                    continue
+            if i < max_intentos - 1:
+                time.sleep(min(2 * (2 ** i), 10))
+                continue
+            return {"ok": False, "error": err}
+        except Exception as e:
+            logger.error(f"[GEMINI] {modelo}: {e}")
+            if i < max_intentos - 1:
+                time.sleep(2)
+                continue
+            return {"ok": False, "error": str(e)}
+    return {"ok": False, "error": "max_intentos"}
+
 
 def gemini_chat(historial, mensaje):
     if not _cb.disponible():
-        logger.warning(f"[GEMINI] Circuit breaker abierto")
         return "Estoy teniendo un problema temporal. Intenta de nuevo en unos minutos."
+
+    prompt = _cargar_prompt()
 
     contents = []
     for m in historial:
-        role = "user" if m["role"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=m["content"])]))
+        role = "user" if m["rol"] == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part(text=m["contenido"])]))
     contents.append(types.Content(role="user", parts=[types.Part(text=mensaje)]))
 
     config = types.GenerateContentConfig(
-        system_instruction=PROMPT,
+        system_instruction=prompt,
         max_output_tokens=300,
         temperature=0.7,
     )
@@ -196,7 +244,6 @@ def clasificar_nivel(mensaje):
         )
         resultado = (resp.text or "").strip().lower()
         logger.info(f"[CLASIFICAR] '{mensaje[:40]}' → {resultado}")
-
         mapa = {
             "iniciacion": "StarLINE-iniciacion.jpeg",
             "intermedio": "StarLINE-intermedio.jpeg",
@@ -242,8 +289,8 @@ async def webhook_whatsapp(request: Request):
                 historial = _leer_historial(numero)
                 respuesta = gemini_chat(historial, texto)
 
-        _agregar_mensaje(numero, "user", texto)
-        _agregar_mensaje(numero, "model", respuesta)
+        _guardar_mensaje(numero, "user", texto)
+        _guardar_mensaje(numero, "model", respuesta)
 
     except Exception as e:
         logger.error(f"[WEBHOOK] Error: {e}", exc_info=True)
