@@ -1,4 +1,4 @@
-import logging, time, threading, os
+import json, logging, time, threading, os
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from google import genai
@@ -95,60 +95,8 @@ def gemini_generar(contents, config):
     return {"ok": False, "error": "max_intentos"}
 
 # ──────────────────────────────
-# SUPABASE - PROMPT
+# SUPABASE - PROMPT (solo de BD)
 # ──────────────────────────────
-
-PROMPT_DEFAULT = """
-Eres BOY, el asistente virtual del STAR CLUB DEPORTIVO.
-
-PERSONALIDAD:
-- Responde siempre en español, con energía y actitud
-- Sin rodeos, ve al grano
-- Trata a los padres con respeto pero sin arrastrarte
-- Usa emojis ocasionalmente
-- Sé breve y claro
-
-MENÚ PRINCIPAL - Cuando el usuario escriba "hola", "menú" o algo similar, presenta las opciones:
-
-📲 *STAR CLUB DEPORTIVO* 🛼💙
-¡Hola! 👋 Soy *Boy*, tu asistente virtual ✨
-Estoy aquí para ayudarte 💙
-Escribe el número de la opción que necesitas 👇
-
-1️⃣ Quiénes somos
-2️⃣ Horarios y sedes
-3️⃣ Copa StarX3
-4️⃣ Uniformes y tienda
-5️⃣ Pagos y mensualidades
-6️⃣ Área de deportistas
-7️⃣ Próximos eventos
-8️⃣ Preguntas frecuentes
-9️⃣ Redes sociales
-🔟 Hablar con una persona
-
-INFORMACIÓN DEL CLUB:
-- Star Club Deportivo, fundado en 2013
-- Afiliado a Liga de Patinaje de Cundinamarca y Federación Colombiana de Patinaje
-- Sedes: Girardot y Melgar
-- Niños desde 3 años
-- Profesora: Ivonn
-
-INSCRIPCIÓN:
-- Inscripción anual: $50.000
-- Sede Melgar (Escuela): $90.000/mes, 4 veces por semana
-- Sede Girardot:
-  • Iniciación: $90.000/mes, 3 veces por semana
-  • Intermedio: $100.000/mes, 5 veces por semana
-  • Avanzado: $110.000/mes, 9 jornadas por semana
-
-HORARIOS - Cuando pregunten por horarios:
-- Pregunta primero: ¿Girardot o Melgar? ¿Y qué nivel?
-- Luego envía la imagen correspondiente
-
-Si el usuario elige una opción del menú, responde con la información de esa sección.
-Si el usuario se pone grosero o insiste con temas que no manejas, responde:
-"Comunicaré a Ivonn para que te contacte. Escribe *10* y la llamo."
-"""
 
 _prompt_cache = {"valor": None, "ts": 0}
 
@@ -156,119 +104,81 @@ def _cargar_prompt():
     ahora = time.time()
     if _prompt_cache["valor"] and ahora - _prompt_cache["ts"] < 300:
         return _prompt_cache["valor"]
-    try:
-        from db import supabase
-        if not supabase:
-            return PROMPT_DEFAULT
-        r = supabase.table("configuracion").select("valor").eq("id", "system_prompt").execute()
-        if r.data and len(r.data) > 0:
-            _prompt_cache["valor"] = r.data[0]["valor"]
-            _prompt_cache["ts"] = ahora
-            return _prompt_cache["valor"]
-    except Exception as e:
-        logger.warning(f"[PROMPT] Error cargando de Supabase: {e}")
-    return PROMPT_DEFAULT
+    from db import supabase
+    if not supabase:
+        raise RuntimeError("Supabase no disponible para cargar prompt")
+    r = supabase.table("configuracion").select("valor").eq("id", "system_prompt").execute()
+    if not r.data or len(r.data) == 0:
+        raise RuntimeError("system_prompt no encontrado en configuracion")
+    _prompt_cache["valor"] = r.data[0]["valor"]
+    _prompt_cache["ts"] = ahora
+    return _prompt_cache["valor"]
 
 # ──────────────────────────────
-# SUPABASE - MEMORIA + RESÚMENES
+# SUPABASE - MEMORIA (1 fila por número, resumen en content)
 # ──────────────────────────────
 
 MAX_MENSAJES = 8
-UMBRAL_RESUMEN = 8
 
-def _guardar_mensaje(numero, rol, contenido):
+def _leer_conversacion(numero):
     try:
         from db import supabase
-        if supabase:
-            supabase.table("conversaciones").insert({
-                "numero": numero,
-                "rol": rol,
-                "contenido": contenido,
-            }).execute()
+        if not supabase:
+            return [], None
+        r = supabase.table("conversaciones").select("id,contenido").eq("numero", numero).execute()
+        if r.data and len(r.data) > 0:
+            row = r.data[0]
+            datos = json.loads(row["contenido"]) if row["contenido"] else []
+            return datos, row["id"]
+        return [], None
+    except Exception as e:
+        logger.warning(f"[MEMORIA] Error leyendo: {e}")
+        return [], None
+
+def _guardar_conversacion(numero, mensajes, row_id=None):
+    try:
+        from db import supabase
+        if not supabase:
+            return
+        contenido = json.dumps(mensajes, ensure_ascii=False)
+        if row_id:
+            supabase.table("conversaciones").update({"contenido": contenido}).eq("id", row_id).execute()
+        else:
+            supabase.table("conversaciones").insert({"numero": numero, "contenido": contenido}).execute()
     except Exception as e:
         logger.warning(f"[MEMORIA] Error guardando: {e}")
 
-def _contar_mensajes(numero):
+def _resumir(mensajes):
     try:
         from db import supabase
-        if not supabase:
-            return 0
-        r = supabase.table("conversaciones").select("id", count="exact").eq("numero", numero).execute()
-        return r.count or 0
-    except Exception:
-        return 0
-
-def _leer_historial(numero, limite=8):
-    try:
-        from db import supabase
-        if not supabase:
-            return []
-        r = (supabase.table("conversaciones")
-             .select("rol,contenido")
-             .eq("numero", numero)
-             .order("created_at", desc=True)
-             .limit(limite)
-             .execute())
-        if r.data:
-            return list(reversed(r.data))
-    except Exception as e:
-        logger.warning(f"[MEMORIA] Error leyendo: {e}")
-    return []
-
-def _leer_resumen(numero):
-    try:
-        from db import supabase
-        if not supabase:
-            return None
-        r = (supabase.table("resumenes")
-             .select("contenido")
-             .eq("numero", numero)
-             .order("created_at", desc=True)
-             .limit(1)
-             .execute())
-        if r.data and len(r.data) > 0:
-            return r.data[0]["contenido"]
-    except Exception as e:
-        logger.warning(f"[RESUMEN] Error leyendo: {e}")
-    return None
-
-def _crear_resumen(numero):
-    try:
-        from db import supabase
-        if not supabase:
-            return
-        mensajes = _leer_historial(numero, limite=20)
-        if len(mensajes) < UMBRAL_RESUMEN:
-            return
-        texto = "\n".join([f"{m['rol']}: {m['contenido']}" for m in mensajes])
+        texto = "\n".join([f"{m['rol']}: {m['content']}" for m in mensajes])
         resp = _cliente().models.generate_content(
             model="gemini-2.5-flash-lite",
             contents=f"Resume esta conversación en 2-3 oraciones. Sé conciso:\n\n{texto}",
             config=types.GenerateContentConfig(
-                system_instruction="Eres un asistente que resume conversaciones. Solo d el resumen, nada más.",
                 max_output_tokens=150,
                 temperature=0.3,
             ),
         )
-        resumen = (resp.text or "").strip()
-        if resumen:
-            supabase.table("resumenes").insert({
-                "numero": numero,
-                "contenido": resumen,
-            }).execute()
-            supabase.table("conversaciones").delete().eq("numero", numero).execute()
-            logger.info(f"[RESUMEN] Creado para {numero}")
+        return (resp.text or "").strip() or "Conversación sin detalles relevantes."
     except Exception as e:
-        logger.warning(f"[RESUMEN] Error creando: {e}")
+        logger.warning(f"[RESUMEN] Error: {e}")
+        return "Conversación sin detalles relevantes."
 
-def _obtener_contexto(numero):
-    resumen = _leer_resumen(numero)
-    mensajes = _leer_historial(numero, limite=8)
-    historial = []
-    if resumen:
-        historial.append({"rol": "system", "contenido": f"Resumen de conversación anterior: {resumen}"})
-    historial.extend(mensajes)
-    return historial
+def _agregar_y_guardar(numero, rol, contenido):
+    mensajes, row_id = _leer_conversacion(numero)
+    mensajes.append({"rol": rol, "content": contenido})
+
+    mensajes_reales = [m for m in mensajes if m["rol"] != "resumen"]
+    if len(mensajes_reales) > MAX_MENSAJES:
+        resumen_texto = _resumir(mensajes)
+        mensajes = [{"rol": "resumen", "content": resumen_texto}]
+
+    _guardar_conversacion(numero, mensajes, row_id)
+
+def _obtener_historial(numero):
+    mensajes, _ = _leer_conversacion(numero)
+    return mensajes
 
 # ──────────────────────────────
 # CHAT
@@ -278,16 +188,20 @@ def gemini_chat(historial, mensaje):
     if not _cb.disponible():
         return "Estoy teniendo un problema temporal. Intenta de nuevo en unos minutos."
 
-    prompt = _cargar_prompt()
+    try:
+        prompt = _cargar_prompt()
+    except Exception as e:
+        logger.error(f"[PROMPT] Error: {e}")
+        return "Estoy teniendo un problema con la configuración. Intenta de nuevo."
 
     contents = []
     for m in historial:
-        if m["rol"] == "system":
-            contents.append(types.Content(role="user", parts=[types.Part(text=m["contenido"])]))
-            contents.append(types.Content(role="model", parts=[types.Part(text="Entendido, tengo el contexto.")]))
+        if m["rol"] == "resumen":
+            contents.append(types.Content(role="user", parts=[types.Part(text=m["content"])]))
+            contents.append(types.Content(role="model", parts=[types.Part(text="Contexto entendido.")]))
         else:
             role = "user" if m["rol"] == "user" else "model"
-            contents.append(types.Content(role=role, parts=[types.Part(text=m["contenido"])]))
+            contents.append(types.Content(role=role, parts=[types.Part(text=m["content"])]))
     contents.append(types.Content(role="user", parts=[types.Part(text=mensaje)]))
 
     config = types.GenerateContentConfig(
@@ -384,15 +298,11 @@ async def webhook_whatsapp(request: Request):
                 respuesta = "¿Qué horario te gustaría saber? 📍\n• Girardot: iniciación, intermedio o avanzado\n• Melgar"
                 _guardar_estado(numero, "esperando_horario")
             else:
-                historial = _obtener_contexto(numero)
+                historial = _obtener_historial(numero)
                 respuesta = gemini_chat(historial, texto)
 
-        _guardar_mensaje(numero, "user", texto)
-        _guardar_mensaje(numero, "model", respuesta)
-
-        total = _contar_mensajes(numero)
-        if total >= UMBRAL_RESUMEN:
-            _crear_resumen(numero)
+        _agregar_y_guardar(numero, "user", texto)
+        _agregar_y_guardar(numero, "model", respuesta)
 
     except Exception as e:
         logger.error(f"[WEBHOOK] Error: {e}", exc_info=True)
