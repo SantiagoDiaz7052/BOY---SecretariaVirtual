@@ -52,12 +52,22 @@ _cb = CircuitBreaker()
 # ──────────────────────────────
 
 _conversaciones = {}
+_historial = {}
 
 def _guardar_estado(numero, estado):
     _conversaciones[numero] = estado
 
 def _leer_estado(numero):
     return _conversaciones.pop(numero, None)
+
+def _agregar_mensaje(numero, rol, contenido):
+    if numero not in _historial:
+        _historial[numero] = []
+    _historial[numero].append({"role": rol, "content": contenido})
+    _historial[numero] = _historial[numero][-6:]
+
+def _leer_historial(numero):
+    return _historial.get(numero, [])
 
 # ──────────────────────────────
 # GEMINI
@@ -219,7 +229,11 @@ async def webhook_whatsapp(request: Request):
                 respuesta = "¿Qué horario te gustaría saber? 📍\n• Girardot: iniciación, intermedio o avanzado\n• Melgar"
                 _guardar_estado(numero, "esperando_horario")
             else:
-                respuesta = gemini_chat([], texto)
+                historial = _leer_historial(numero)
+                respuesta = gemini_chat(historial, texto)
+
+        _agregar_mensaje(numero, "user", texto)
+        _agregar_mensaje(numero, "model", respuesta)
 
     except Exception as e:
         logger.error(f"[WEBHOOK] Error: {e}", exc_info=True)
