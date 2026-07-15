@@ -89,17 +89,20 @@ def gemini_generar(contents, config, intento=0):
             resp = _cliente().models.generate_content(model=modelo, contents=contents, config=config)
             if resp.candidates:
                 return {"ok": True, "data": resp}
+            logger.error(f"[GEMINI] Sin candidates en respuesta: {resp}")
+            return {"ok": False, "error": "sin_candidates"}
         except ServerError as e:
             err = str(e)
+            logger.warning(f"[GEMINI] ServerError en {modelo}: {err}")
             if "503" in err or "UNAVAILABLE" in err:
                 if "gemini-2.5-flash" not in modelo:
-                    logger.warning(f"[GEMINI] 503 en {modelo}, probando fallback")
                     continue
             if i < max_intentos - 1:
                 time.sleep(min(2 * (2 ** i), 10))
                 continue
             return {"ok": False, "error": err}
         except Exception as e:
+            logger.error(f"[GEMINI] Excepción en {modelo}: {type(e).__name__}: {e}")
             if i < max_intentos - 1:
                 time.sleep(2)
                 continue
@@ -139,6 +142,7 @@ Si el usuario se pone grosero o insiste con temas que no manejas, responde:
 
 def gemini_chat(historial, mensaje):
     if not _cb.disponible():
+        logger.warning(f"[GEMINI] Circuit breaker abierto")
         return "Estoy teniendo un problema temporal. Intenta de nuevo en unos minutos."
 
     contents = []
@@ -155,6 +159,7 @@ def gemini_chat(historial, mensaje):
 
     r = gemini_generar(contents, config)
     if not r["ok"]:
+        logger.error(f"[GEMINI] Fallo: {r['error']}")
         _cb.fail()
         return "Estoy teniendo un problema temporal. Intenta de nuevo en unos minutos."
     _cb.ok()
