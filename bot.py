@@ -231,6 +231,36 @@ avanzado → si menciona avanzado, competitivo, alto rendimiento, 13+ años
 melgar → si menciona Melgar como sede o ubicación
 ninguno → si no habla de horarios ni niveles"""
 
+RESPUESTAS_HORARIO = {
+    "StarLINE-iniciacion.jpeg": (
+        "¡Bienvenidos a la temporada 2026! 🎉🛼\n\n"
+        "📌 *Grupo Iniciación* ✓\n"
+        "Mensualidad tiene un costo de $99.999 y entrenan 4 veces a la semana ✅\n\n"
+        "Cuéntame, ¿te gustaría inscribirte o necesitas más información? 😊"
+    ),
+    "StarLINE-intermedio.jpeg": (
+        "¡Bienvenidos a la temporada 2026! 🎉🛼\n\n"
+        "📌 *Grupo Intermedio* ✓\n"
+        "Mensualidad tiene un costo de $99.999 y entrenan 6 días a la semana 🏅\n\n"
+        "Cuéntame, ¿te gustaría inscribirte o necesitas más información? 😊"
+    ),
+    "StarLINE-avanzado.jpeg": (
+        "¡Bienvenidos a la temporada 2026! 🎉🛼\n\n"
+        "📌 *Grupo Avanzado* ✓\n"
+        "Mensualidad tiene un costo de $110.000 y entrenan 8 jornadas a la semana 🏆\n\n"
+        "Cuéntame, ¿te gustaría inscribirte o necesitas más información? 😊"
+    ),
+    "StarLINE-melgar.jpeg": (
+        "¡Bienvenidos a la temporada 2026 Melgar! 🎉🛼\n\n"
+        "A continuación te enviamos la información de interés:\n\n"
+        "📌 Matrícula tiene un costo de $50.000 pesos 💲\n\n"
+        "*Grupo Único* 🛼\n"
+        "Mensualidad tiene un costo de $89.999 y entrenan martes, miércoles, jueves y sábado 🗓️\n\n"
+        "Opción de asistencia 1 vez a la semana en nuestra sede en Girardot 🔥\n\n"
+        "¿Te gustaría inscribirte o necesitas más información? 😊"
+    ),
+}
+
 def clasificar_nivel(mensaje):
     try:
         resp = _cliente().models.generate_content(
@@ -250,10 +280,13 @@ def clasificar_nivel(mensaje):
             "avanzado": "StarLINE-avanzado.jpeg",
             "melgar": "StarLINE-melgar.jpeg",
         }
-        return mapa.get(resultado)
+        imagen = mapa.get(resultado)
+        if imagen:
+            return imagen, RESPUESTAS_HORARIO.get(imagen, "Acá te va el horario 🛼")
+        return None, None
     except Exception as e:
         logger.error(f"[CLASIFICAR] Error: {e}")
-        return None
+        return None, None
 
 # ──────────────────────────────
 # ESTADO POR CONVERSACIÓN
@@ -286,9 +319,9 @@ async def webhook_whatsapp(request: Request):
         imagen = None
 
         if estado == "esperando_horario":
-            imagen = clasificar_nivel(texto)
+            imagen, respuesta_img = clasificar_nivel(texto)
             if imagen:
-                respuesta = "Acá te va el horario 🛼"
+                respuesta = respuesta_img
             else:
                 respuesta = "No te entendí bien. Decime: iniciación, intermedio, avanzado o Melgar."
                 _guardar_estado(numero, "esperando_horario")
