@@ -222,35 +222,43 @@ def gemini_chat(historial, mensaje):
 # CLASIFICACIÓN DE HORARIO
 # ──────────────────────────────
 
-CLASIFICAR_PROMPT = """Clasifica el mensaje del usuario en UNA de estas opciones.
-Responde SOLO con el nombre exacto, nada más:
+CLASIFICAR_PROMPT = """Eres un clasificador de intenciones para un club de patinaje.
+Analiza el mensaje del usuario y responde SOLO con una de estas opciones exactas:
 
-iniciacion → si menciona iniciación, motricidad, niños pequeños, 3-5 años, principiantes
-intermedio → si menciona intermedio, técnica básica, 6-12 años
-avanzado → si menciona avanzado, competitivo, alto rendimiento, 13+ años
-melgar → si menciona Melgar como sede o ubicación
-ninguno → si no habla de horarios ni niveles"""
+iniciacion → quiere ver horario de iniciación, niños pequeños, 3-5 años, principiantes
+intermedio → quiere ver horario de intermedio, técnica básica, 6-12 años
+avanzado → quiere ver horario de avanzado, competitivo, alto rendimiento, 13+ años
+melgar → quiere ver horarios de Melgar o pregunta por la sede Melgar
+todos → quiere ver todos los horarios, los 3 horarios, todos los niveles, o no sabe cuál elegir
+ninguno → no habla de horarios ni niveles"""
+
+IMAGENES = {
+    "iniciacion": "StarLINE-iniciacion.jpeg",
+    "intermedio": "StarLINE-intermedio.jpeg",
+    "avanzado": "StarLINE-avanzado.jpeg",
+    "melgar": "StarLINE-melgar.jpeg",
+}
 
 RESPUESTAS_HORARIO = {
-    "StarLINE-iniciacion.jpeg": (
+    "iniciacion": (
         "¡Bienvenidos a la temporada 2026! 🎉🛼\n\n"
         "📌 *Grupo Iniciación* ✓\n"
         "Mensualidad tiene un costo de $99.999 y entrenan 4 veces a la semana ✅\n\n"
         "Cuéntame, ¿te gustaría inscribirte o necesitas más información? 😊"
     ),
-    "StarLINE-intermedio.jpeg": (
+    "intermedio": (
         "¡Bienvenidos a la temporada 2026! 🎉🛼\n\n"
         "📌 *Grupo Intermedio* ✓\n"
         "Mensualidad tiene un costo de $99.999 y entrenan 6 días a la semana 🏅\n\n"
         "Cuéntame, ¿te gustaría inscribirte o necesitas más información? 😊"
     ),
-    "StarLINE-avanzado.jpeg": (
+    "avanzado": (
         "¡Bienvenidos a la temporada 2026! 🎉🛼\n\n"
         "📌 *Grupo Avanzado* ✓\n"
         "Mensualidad tiene un costo de $110.000 y entrenan 8 jornadas a la semana 🏆\n\n"
         "Cuéntame, ¿te gustaría inscribirte o necesitas más información? 😊"
     ),
-    "StarLINE-melgar.jpeg": (
+    "melgar": (
         "¡Bienvenidos a la temporada 2026 Melgar! 🎉🛼\n\n"
         "A continuación te enviamos la información de interés:\n\n"
         "📌 Matrícula tiene un costo de $50.000 pesos 💲\n\n"
@@ -258,6 +266,13 @@ RESPUESTAS_HORARIO = {
         "Mensualidad tiene un costo de $89.999 y entrenan martes, miércoles, jueves y sábado 🗓️\n\n"
         "Opción de asistencia 1 vez a la semana en nuestra sede en Girardot 🔥\n\n"
         "¿Te gustaría inscribirte o necesitas más información? 😊"
+    ),
+    "todos": (
+        "¡Claro! Te muestro todos nuestros horarios 🛼💙\n\n"
+        "• *Iniciación*: $99.999/mes, 4 veces por semana\n"
+        "• *Intermedio*: $99.999/mes, 6 días por semana\n"
+        "• *Avanzado*: $110.000/mes, 8 jornadas por semana\n\n"
+        "¿Cuál te gustaría ver en detalle? O si quieres, cuéntame la edad del patinador y te recomiendo el grupo ideal 😊"
     ),
 }
 
@@ -274,31 +289,21 @@ def clasificar_nivel(mensaje):
         )
         resultado = (resp.text or "").strip().lower()
         logger.info(f"[CLASIFICAR] '{mensaje[:40]}' → {resultado}")
-        mapa = {
-            "iniciacion": "StarLINE-iniciacion.jpeg",
-            "intermedio": "StarLINE-intermedio.jpeg",
-            "avanzado": "StarLINE-avanzado.jpeg",
-            "melgar": "StarLINE-melgar.jpeg",
-        }
-        imagen = mapa.get(resultado)
+
+        if resultado == "todos":
+            return None, RESPUESTAS_HORARIO["todos"]
+
+        imagen = IMAGENES.get(resultado)
         if imagen:
-            return imagen, RESPUESTAS_HORARIO.get(imagen, "Acá te va el horario 🛼")
+            return imagen, RESPUESTAS_HORARIO.get(resultado, "Acá te va el horario 🛼")
+
         return None, None
     except Exception as e:
         logger.error(f"[CLASIFICAR] Error: {e}")
         return None, None
-
-# ──────────────────────────────
-# ESTADO POR CONVERSACIÓN
-# ──────────────────────────────
-
-_estado = {}
-
-def _guardar_estado(numero, estado):
-    _estado[numero] = estado
-
-def _leer_estado(numero):
-    return _estado.pop(numero, None)
+    except Exception as e:
+        logger.error(f"[CLASIFICAR] Error: {e}")
+        return None, None
 
 # ──────────────────────────────
 # WEBHOOK
@@ -315,24 +320,15 @@ async def webhook_whatsapp(request: Request):
 
         logger.info(f"[WEBHOOK] De: {numero} | Msg: {texto[:50]}")
 
-        estado = _leer_estado(numero)
-        imagen = None
+        imagen, respuesta_clasif = clasificar_nivel(texto)
 
-        if estado == "esperando_horario":
-            imagen, respuesta_img = clasificar_nivel(texto)
-            if imagen:
-                respuesta = respuesta_img
-            else:
-                respuesta = "No te entendí bien. Decime: iniciación, intermedio, avanzado o Melgar."
-                _guardar_estado(numero, "esperando_horario")
+        if imagen:
+            respuesta = respuesta_clasif
+        elif respuesta_clasif:
+            respuesta = respuesta_clasif
         else:
-            t = texto.lower()
-            if any(p in t for p in ["horario", "horarios", "clase", "clases", "entreno", "entrenamiento"]):
-                respuesta = "¿Qué horario te gustaría saber? 📍\n• Girardot: iniciación, intermedio o avanzado\n• Melgar"
-                _guardar_estado(numero, "esperando_horario")
-            else:
-                historial = _obtener_historial(numero)
-                respuesta = gemini_chat(historial, texto)
+            historial = _obtener_historial(numero)
+            respuesta = gemini_chat(historial, texto)
 
         _agregar_y_guardar(numero, "user", texto)
         _agregar_y_guardar(numero, "model", respuesta)
