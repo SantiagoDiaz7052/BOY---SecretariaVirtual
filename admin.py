@@ -1,4 +1,5 @@
-import logging, bcrypt, sys, fastapi, os
+import logging, bcrypt, sys, fastapi, os, json
+import httpx
 from datetime import datetime
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -21,6 +22,27 @@ def _auth(request):
     if "usuario" not in request.session:
         return RedirectResponse(url="/login", status_code=303)
     return None
+
+async def _enviar_whatsapp(numero, texto):
+    try:
+        TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
+        TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+        TWILIO_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+        if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_NUMBER]):
+            logger.error("[TWILIO] Credenciales no configuradas")
+            return False
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
+        data = {"From": f"whatsapp:{TWILIO_NUMBER}", "To": numero, "Body": texto}
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, data=data, auth=(TWILIO_SID, TWILIO_TOKEN))
+            if resp.status_code == 201:
+                logger.info(f"[TWILIO] Mensaje enviado a {numero}")
+                return True
+            logger.error(f"[TWILIO] Error {resp.status_code}: {resp.text}")
+            return False
+    except Exception as e:
+        logger.error(f"[TWILIO] Error enviando: {e}")
+        return False
 
 def _saludo():
     h = datetime.now().hour
@@ -69,7 +91,45 @@ async def bandeja(request: Request):
     auth = _auth(request)
     if auth:
         return auth
-    return templates.TemplateResponse(request, "admin/bandeja.html", {"grupos": [], "total": 0})
+    conversaciones = []
+    total = 0
+    try:
+        from db import supabase
+        if supabase:
+            r = supabase.table("contextos_conversacionales") \
+                .select("id,numero_whatsapp,control,estado,updated_at") \
+                .eq("estado", "activa") \
+                .order("updated_at", desc=True) \
+                .execute()
+            if r.data:
+                for ctx in r.data:
+                    conv_r = supabase.table("conversaciones") \
+                        .select("contenido") \
+                        .eq("numero", ctx["numero_whatsapp"]) \
+                        .limit(1) \
+                        .execute()
+                    last_msg = ""
+                    if conv_r.data and conv_r.data[0].get("contenido"):
+                        try:
+                            msgs = json.loads(conv_r.data[0]["contenido"])
+                            if msgs:
+                                last_msg = msgs[-1].get("content", "")[:80]
+                        except Exception:
+                            pass
+                    conversaciones.append({
+                        "contexto_id": ctx["id"],
+                        "numero": ctx["numero_whatsapp"],
+                        "control": ctx.get("control", "boy"),
+                        "ultimo_mensaje": last_msg,
+                        "updated_at": ctx.get("updated_at", "")
+                    })
+                total = len(conversaciones)
+    except Exception as e:
+        logger.error(f"[BANDEJA] Error: {e}")
+    return templates.TemplateResponse(request, "admin/bandeja.html", {
+        "conversaciones": conversaciones,
+        "total": total
+    })
 
 @router.get("/deportistas", response_class=HTMLResponse)
 async def deportistas(request: Request):
@@ -134,7 +194,32 @@ async def api_notificaciones(request: Request):
     auth = _auth(request)
     if auth:
         return JSONResponse([])
-    return JSONResponse([])
+    try:
+        from db import supabase
+        if not supabase:
+            return JSONResponse([])
+        r = supabase.table("notificaciones") \
+            .select("id,tipo,icono,texto,referencia_id,created_at") \
+            .eq("leida", False) \
+            .order("created_at", desc=True) \
+            .limit(20) \
+            .execute()
+        if not r.data:
+            return JSONResponse([])
+        result = []
+        for n in r.data:
+            result.append({
+                "id": n["id"],
+                "icon": n.get("icono", "🔔"),
+                "text": n["texto"],
+                "time": n.get("created_at", ""),
+                "tipo": n.get("tipo", ""),
+                "referencia_id": n.get("referencia_id")
+            })
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"[API] Error notificaciones: {e}")
+        return JSONResponse([])
 
 @router.get("/api/buscar")
 async def api_buscar(request: Request, q: str = Query(min_length=2)):
@@ -142,3 +227,158 @@ async def api_buscar(request: Request, q: str = Query(min_length=2)):
     if auth:
         return JSONResponse([])
     return JSONResponse([])
+
+# ──────────────────────────────
+# API CONVERSACIONES
+# ──────────────────────────────
+
+@router.get("/api/conversaciones")
+async def api_conversaciones(request: Request):
+    auth = _auth(request)
+    if auth:
+        return JSONResponse([])
+    try:
+        from db import supabase
+        if not supabase:
+            return JSONResponse([])
+        r = supabase.table("contextos_conversacionales") \
+            .select("id,numero_whatsapp,control,estado,created_at,updated_at") \
+            .eq("estado", "activa") \
+            .order("updated_at", desc=True) \
+            .execute()
+        if not r.data:
+            return JSONResponse([])
+        result = []
+        for ctx in r.data:
+            conv_r = supabase.table("conversaciones") \
+                .select("contenido") \
+                .eq("numero", ctx["numero_whatsapp"]) \
+                .limit(1) \
+                .execute()
+            last_msg = ""
+            if conv_r.data and conv_r.data[0].get("contenido"):
+                try:
+                    msgs = json.loads(conv_r.data[0]["contenido"])
+                    if msgs:
+                        last_msg = msgs[-1].get("content", "")[:100]
+                except Exception:
+                    pass
+            result.append({
+                "contexto_id": ctx["id"],
+                "numero": ctx["numero_whatsapp"],
+                "control": ctx.get("control", "boy"),
+                "created_at": ctx.get("created_at", ""),
+                "updated_at": ctx.get("updated_at", ""),
+                "ultimo_mensaje": last_msg
+            })
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"[API] Error listando conversaciones: {e}")
+        return JSONResponse([])
+
+@router.get("/api/conversacion/{contexto_id}")
+async def api_conversacion_historial(request: Request, contexto_id: str):
+    auth = _auth(request)
+    if auth:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        from db import supabase
+        if not supabase:
+            return JSONResponse({"error": "no_db"}, status_code=500)
+        ctx_r = supabase.table("contextos_conversacionales") \
+            .select("id,numero_whatsapp,control,estado") \
+            .eq("id", contexto_id) \
+            .limit(1) \
+            .execute()
+        if not ctx_r.data:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        ctx = ctx_r.data[0]
+        numero = ctx["numero_whatsapp"]
+        conv_r = supabase.table("conversaciones") \
+            .select("contenido") \
+            .eq("numero", numero) \
+            .limit(1) \
+            .execute()
+        messages = []
+        if conv_r.data and conv_r.data[0].get("contenido"):
+            try:
+                messages = json.loads(conv_r.data[0]["contenido"])
+            except Exception:
+                pass
+        return JSONResponse({
+            "contexto_id": ctx["id"],
+            "numero": numero,
+            "control": ctx.get("control", "boy"),
+            "estado": ctx.get("estado", "activa"),
+            "mensajes": messages
+        })
+    except Exception as e:
+        logger.error(f"[API] Error historial: {e}")
+        return JSONResponse({"error": "server_error"}, status_code=500)
+
+@router.post("/api/conversacion/{contexto_id}/tomar-control")
+async def api_tomar_control(request: Request, contexto_id: str):
+    auth = _auth(request)
+    if auth:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        from db import supabase
+        if not supabase:
+            return JSONResponse({"error": "no_db"}, status_code=500)
+        supabase.table("contextos_conversacionales") \
+            .update({"control": "ivonn"}) \
+            .eq("id", contexto_id) \
+            .execute()
+        return JSONResponse({"ok": True, "control": "ivonn"})
+    except Exception as e:
+        logger.error(f"[API] Error tomando control: {e}")
+        return JSONResponse({"error": "server_error"}, status_code=500)
+
+@router.post("/api/conversacion/{contexto_id}/devolver-control")
+async def api_devolver_control(request: Request, contexto_id: str):
+    auth = _auth(request)
+    if auth:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        from db import supabase
+        if not supabase:
+            return JSONResponse({"error": "no_db"}, status_code=500)
+        supabase.table("contextos_conversacionales") \
+            .update({"control": "boy"}) \
+            .eq("id", contexto_id) \
+            .execute()
+        return JSONResponse({"ok": True, "control": "boy"})
+    except Exception as e:
+        logger.error(f"[API] Error devolviendo control: {e}")
+        return JSONResponse({"error": "server_error"}, status_code=500)
+
+@router.post("/api/conversacion/{contexto_id}/responder")
+async def api_responder(request: Request, contexto_id: str):
+    auth = _auth(request)
+    if auth:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        body = await request.json()
+        texto = body.get("texto", "").strip()
+        if not texto:
+            return JSONResponse({"error": "texto_requerido"}, status_code=400)
+        from db import supabase
+        if not supabase:
+            return JSONResponse({"error": "no_db"}, status_code=500)
+        ctx_r = supabase.table("contextos_conversacionales") \
+            .select("numero_whatsapp") \
+            .eq("id", contexto_id) \
+            .limit(1) \
+            .execute()
+        if not ctx_r.data:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        numero = ctx_r.data[0]["numero_whatsapp"]
+        twilio_ok = await _enviar_whatsapp(numero, texto)
+        if twilio_ok:
+            from bot import _agregar_y_guardar
+            _agregar_y_guardar(numero, "model", texto)
+            return JSONResponse({"ok": True})
+        return JSONResponse({"error": "twilio_error"}, status_code=500)
+    except Exception as e:
+        logger.error(f"[API] Error respondiendo: {e}")
+        return JSONResponse({"error": "server_error"}, status_code=500)

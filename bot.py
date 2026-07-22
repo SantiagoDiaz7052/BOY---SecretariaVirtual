@@ -181,6 +181,39 @@ def _obtener_historial(numero):
     return mensajes
 
 # ──────────────────────────────
+# CONTROL DE CONVERSACIÓN
+# ──────────────────────────────
+
+def _verificar_control(numero):
+    try:
+        from db import supabase
+        if not supabase:
+            return "boy"
+        r = supabase.table("contextos_conversacionales") \
+            .select("id,control") \
+            .eq("numero_whatsapp", numero) \
+            .eq("estado", "activa") \
+            .limit(1) \
+            .execute()
+        if r.data and len(r.data) > 0:
+            return r.data[0].get("control", "boy")
+        club_r = supabase.table("clubs").select("id").eq("activo", True).limit(1).execute()
+        if not club_r.data or len(club_r.data) == 0:
+            logger.warning(f"[CONTROL] No hay club activo: {numero}")
+            return "boy"
+        club_id = club_r.data[0]["id"]
+        supabase.table("contextos_conversacionales").insert({
+            "club_id": club_id,
+            "numero_whatsapp": numero,
+            "estado": "activa",
+            "control": "boy"
+        }).execute()
+        return "boy"
+    except Exception as e:
+        logger.warning(f"[CONTROL] Error: {e}")
+        return "boy"
+
+# ──────────────────────────────
 # CHAT
 # ──────────────────────────────
 
@@ -301,9 +334,6 @@ def clasificar_nivel(mensaje):
     except Exception as e:
         logger.error(f"[CLASIFICAR] Error: {e}")
         return None, None
-    except Exception as e:
-        logger.error(f"[CLASIFICAR] Error: {e}")
-        return None, None
 
 # ──────────────────────────────
 # WEBHOOK
@@ -320,6 +350,16 @@ async def webhook_whatsapp(request: Request):
 
         logger.info(f"[WEBHOOK] De: {numero} | Msg: {texto[:50]}")
 
+        control = _verificar_control(numero)
+        _agregar_y_guardar(numero, "user", texto)
+
+        if control == "ivonn":
+            logger.info(f"[WEBHOOK] Control Ivonn, no se responde: {numero}")
+            return PlainTextResponse(
+                content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+                media_type="application/xml"
+            )
+
         imagen, respuesta_clasif = clasificar_nivel(texto)
 
         if imagen:
@@ -330,7 +370,6 @@ async def webhook_whatsapp(request: Request):
             historial = _obtener_historial(numero)
             respuesta = gemini_chat(historial, texto)
 
-        _agregar_y_guardar(numero, "user", texto)
         _agregar_y_guardar(numero, "model", respuesta)
 
     except Exception as e:

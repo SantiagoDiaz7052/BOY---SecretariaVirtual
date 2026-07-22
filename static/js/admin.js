@@ -1,6 +1,9 @@
 const AdminApp = {
   notifications: [],
   searchData: [],
+  currentContextoId: null,
+  currentControl: null,
+  pollTimer: null,
 
   init() {
     this.setupSidebar();
@@ -8,6 +11,8 @@ const AdminApp = {
     this.setupNotifications();
     this.setupSearch();
     this.setupBandejaFilters();
+    this.setupBandejaAutoOpen();
+    this.startPolling();
   },
 
   /* ─── SIDEBAR ─── */
@@ -86,7 +91,20 @@ const AdminApp = {
   },
 
   handleNotifClick(id) {
-    window.location.href = '/admin/bandeja';
+    const notif = this.notifications.find(n => n.id === id);
+    if (notif && notif.referencia_id) {
+      window.location.href = '/admin/bandeja?conversacion=' + notif.referencia_id;
+    } else {
+      window.location.href = '/admin/bandeja';
+    }
+  },
+
+  /* ─── POLLING ─── */
+  startPolling() {
+    this.loadNotifications();
+    this.pollTimer = setInterval(() => {
+      this.loadNotifications();
+    }, 10000);
   },
 
   /* ─── BÚSQUEDA GLOBAL ─── */
@@ -150,16 +168,137 @@ const AdminApp = {
         parent.querySelectorAll('.bf-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const filter = btn.dataset.filter;
-        document.querySelectorAll('.bandeja-section').forEach(section => {
+        document.querySelectorAll('[data-control]').forEach(card => {
           if (!filter || filter === 'todas') {
-            section.style.display = '';
+            card.style.display = '';
             return;
           }
-          const type = section.dataset.type;
-          section.style.display = type === filter ? '' : 'none';
+          card.style.display = card.dataset.control === filter ? '' : 'none';
         });
       });
     });
+  },
+
+  /* ─── BANDEJA AUTO-OPEN ─── */
+  setupBandejaAutoOpen() {
+    const params = new URLSearchParams(window.location.search);
+    const conversacionId = params.get('conversacion');
+    if (conversacionId && window.location.pathname === '/admin/bandeja') {
+      setTimeout(() => this.abrirConversacion(conversacionId), 500);
+    }
+  },
+
+  /* ─── CONVERSACIÓN ─── */
+  abrirConversacion(contextoId) {
+    this.currentContextoId = contextoId;
+    const drawer = document.getElementById('conversationDrawer');
+    const overlay = document.getElementById('conversationOverlay');
+    if (drawer) drawer.classList.add('open');
+    if (overlay) overlay.classList.add('open');
+
+    fetch(`/admin/api/conversacion/${contextoId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return;
+        this.currentControl = data.control;
+        this.renderConversation(data);
+      })
+      .catch(() => {});
+  },
+
+  cerrarConversacion() {
+    const drawer = document.getElementById('conversationDrawer');
+    const overlay = document.getElementById('conversationOverlay');
+    if (drawer) drawer.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
+    this.currentContextoId = null;
+    this.currentControl = null;
+  },
+
+  renderConversation(data) {
+    const title = document.getElementById('convTitle');
+    const status = document.getElementById('convStatus');
+    const messages = document.getElementById('convMessages');
+    const btnTomar = document.getElementById('btnTomarControl');
+    const btnDevolver = document.getElementById('btnDevolverControl');
+
+    if (title) title.textContent = data.numero;
+    if (status) {
+      const esBoy = data.control === 'boy';
+      status.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:500">
+        <span style="width:8px;height:8px;border-radius:50%;background:${esBoy ? '#22c55e' : '#a855f7'}"></span>
+        ${esBoy ? 'BOY activo' : 'Atención humana — Ivonn'}
+      </span>`;
+    }
+    if (btnTomar) btnTomar.style.display = data.control === 'boy' ? '' : 'none';
+    if (btnDevolver) btnDevolver.style.display = data.control === 'ivonn' ? '' : 'none';
+
+    if (messages) {
+      messages.innerHTML = data.mensajes.map(m => {
+        const esUser = m.rol === 'user';
+        const esResumen = m.rol === 'resumen';
+        if (esResumen) {
+          return `<div style="text-align:center;padding:8px;margin:8px 0;background:var(--bg-secondary);border-radius:6px;font-size:.8rem;color:var(--text-muted)">
+            📋 ${m.content}
+          </div>`;
+        }
+        return `<div style="display:flex;${esUser ? 'justify-content:flex-start' : 'justify-content:flex-end'};margin:6px 0">
+          <div style="max-width:75%;padding:10px 14px;border-radius:12px;font-size:.85rem;
+            ${esUser ? 'background:var(--bg-secondary);color:var(--text-primary)' : 'background:#3b82f6;color:white'}">
+            ${m.content}
+          </div>
+        </div>`;
+      }).join('');
+      messages.scrollTop = messages.scrollHeight;
+    }
+  },
+
+  tomarControl() {
+    if (!this.currentContextoId) return;
+    fetch(`/admin/api/conversacion/${this.currentContextoId}/tomar-control`, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          this.currentControl = 'ivonn';
+          this.abrirConversacion(this.currentContextoId);
+        }
+      })
+      .catch(() => {});
+  },
+
+  devolverControl() {
+    if (!this.currentContextoId) return;
+    fetch(`/admin/api/conversacion/${this.currentContextoId}/devolver-control`, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          this.currentControl = 'boy';
+          this.abrirConversacion(this.currentContextoId);
+        }
+      })
+      .catch(() => {});
+  },
+
+  responderMensaje() {
+    if (!this.currentContextoId) return;
+    const input = document.getElementById('convInput');
+    if (!input) return;
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    fetch(`/admin/api/conversacion/${this.currentContextoId}/responder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          input.value = '';
+          setTimeout(() => this.abrirConversacion(this.currentContextoId), 500);
+        }
+      })
+      .catch(() => {});
   },
 };
 

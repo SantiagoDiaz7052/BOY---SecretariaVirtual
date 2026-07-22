@@ -4,39 +4,57 @@
 <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap">
   <div>
     <h2>📥 Bandeja de trabajo</h2>
-    <p>{{ total }} tareas pendientes</p>
+    <p>{{ total }} conversaciones activas</p>
   </div>
   <div class="bandeja-filters">
     <button class="bf-btn active" data-filter="todas">Todas</button>
-    <button class="bf-btn" data-filter="evaluacion">🔴 Evaluación</button>
-    <button class="bf-btn" data-filter="comprobante">🟡 Comprobantes</button>
-    <button class="bf-btn" data-filter="activacion">🔵 Activación</button>
-    <button class="bf-btn" data-filter="vencida">🟠 Vencidas</button>
+    <button class="bf-btn" data-filter="boy">🟢 BOY activo</button>
+    <button class="bf-btn" data-filter="ivonn">🟣 Atención humana</button>
   </div>
 </div>
 
-{% for grupo in grupos %}
-<div class="bandeja-section" data-type="{{ grupo.key }}">
-  <h4>{{ grupo.titulo }} <span class="count">{{ grupo.lista|length }}</span></h4>
-  {% if grupo.lista %}
-    {% for item in grupo.lista %}
-    <div class="action-card">
-      <span class="ac-dot" style="background:{{ item.color }}"></span>
-      <div>
-        <div class="ac-text">{{ item.texto }}</div>
-        <div class="ac-person">{{ item.persona }} · {{ item.detalle }}</div>
-      </div>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-        <span style="font-size:.72rem;color:var(--text-muted)">{{ item.hace }}</span>
-        <button class="btn btn-primary btn-sm" disabled>Resolver</button>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="empty-state" style="padding:20px;border:1px dashed var(--border);border-radius:8px;margin-bottom:8px">
-      <p>No hay {{ grupo.titulo|lower }}</p>
-    </div>
-  {% endif %}
+{% for conv in conversaciones %}
+<div class="action-card" data-control="{{ conv.control }}" onclick="AdminApp.abrirConversacion('{{ conv.contexto_id }}')" style="cursor:pointer">
+  <span class="ac-dot" style="background:{{ '#22c55e' if conv.control == 'boy' else '#a855f7' }}"></span>
+  <div>
+    <div class="ac-text">{{ conv.numero }}</div>
+    <div class="ac-person">{{ conv.ultimo_mensaje or 'Sin mensajes recientes' }}</div>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <span style="font-size:.72rem;color:var(--text-muted)">
+      {% if conv.control == 'boy' %}🟢 BOY{% else %}🟣 Ivonn{% endif %}
+    </span>
+    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); AdminApp.abrirConversacion('{{ conv.contexto_id }}')">Abrir</button>
+  </div>
 </div>
 {% endfor %}
+
+{% if not conversaciones %}
+<div class="empty-state" style="padding:40px;border:1px dashed var(--border);border-radius:8px;text-align:center">
+  <p>No hay conversaciones activas</p>
+</div>
+{% endif %}
+
+<!-- Conversation Drawer -->
+<div class="drawer-overlay" id="conversationOverlay" onclick="AdminApp.cerrarConversacion()"></div>
+<div class="drawer" id="conversationDrawer">
+  <div class="drawer-header" style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border)">
+    <h3 id="convTitle" style="margin:0;font-size:1rem">Conversación</h3>
+    <button class="drawer-close" onclick="AdminApp.cerrarConversacion()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-muted)">✕</button>
+  </div>
+  <div class="drawer-body" style="display:flex;flex-direction:column;height:calc(100% - 60px)">
+    <div id="convStatus" style="padding:12px 16px;border-bottom:1px solid var(--border)"></div>
+    <div id="convMessages" style="flex:1;overflow-y:auto;padding:16px"></div>
+    <div id="convControls" style="padding:16px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button id="btnTomarControl" class="btn btn-primary btn-sm" onclick="AdminApp.tomarControl()" style="display:none">Tomar control</button>
+        <button id="btnDevolverControl" class="btn btn-secondary btn-sm" onclick="AdminApp.devolverControl()" style="display:none">Devolver a BOY</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="convInput" placeholder="Escribe una respuesta..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" onkeydown="if(event.key==='Enter') AdminApp.responderMensaje()">
+        <button class="btn btn-primary btn-sm" onclick="AdminApp.responderMensaje()">Enviar</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
