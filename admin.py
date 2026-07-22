@@ -222,6 +222,8 @@ async def api_notificaciones(request: Request):
             })
         return JSONResponse(result)
     except Exception as e:
+        if "notificaciones" in str(e) and "PGRST205" in str(e):
+            return JSONResponse([])
         logger.error(f"[API] Error notificaciones: {e}")
         return JSONResponse([])
 
