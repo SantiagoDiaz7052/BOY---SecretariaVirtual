@@ -30,23 +30,25 @@ async def _enviar_whatsapp(numero, texto):
         TWILIO_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
         if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_NUMBER]):
             logger.error("[TWILIO] Credenciales no configuradas")
-            return False
+            return False, "Credenciales no configuradas en .env"
         url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
-        data = {"From": f"whatsapp:{TWILIO_NUMBER}", "To": numero, "Body": texto}
-        logger.info(f"[TWILIO] Enviando a {numero}")
+        to_number = numero if numero.startswith("whatsapp:") else f"whatsapp:{numero}"
+        data = {"From": f"whatsapp:{TWILIO_NUMBER}", "To": to_number, "Body": texto}
+        logger.info(f"[TWILIO] Enviando a {to_number}")
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(url, data=data, auth=(TWILIO_SID, TWILIO_TOKEN))
             if resp.status_code == 201:
-                logger.info(f"[TWILIO] Mensaje enviado OK a {numero}")
-                return True
-            logger.error(f"[TWILIO] Error {resp.status_code}: {resp.text[:200]}")
-            return False
+                logger.info(f"[TWILIO] Mensaje enviado OK a {to_number}")
+                return True, None
+            detail = resp.text[:300]
+            logger.error(f"[TWILIO] Error {resp.status_code}: {detail}")
+            return False, f"HTTP {resp.status_code}: {detail}"
     except httpx.TimeoutException:
         logger.error("[TWILIO] Timeout enviando mensaje")
-        return False
+        return False, "Timeout conectando con Twilio"
     except Exception as e:
         logger.error(f"[TWILIO] Error enviando: {e}", exc_info=True)
-        return False
+        return False, str(e)
 
 def _saludo():
     h = datetime.now().hour
@@ -384,14 +386,14 @@ async def api_responder(request: Request, contexto_id: str):
             logger.warning(f"[API] Intento de respuesta con control={control}: {contexto_id}")
             return JSONResponse({"error": "no_tiene_control"}, status_code=403)
         logger.info(f"[API] Enviando respuesta a {numero} ({contexto_id})")
-        twilio_ok = await _enviar_whatsapp(numero, texto)
+        twilio_ok, twilio_err = await _enviar_whatsapp(numero, texto)
         if twilio_ok:
             from bot import _agregar_y_guardar
             _agregar_y_guardar(numero, "model", texto)
             logger.info(f"[API] Respuesta enviada OK a {numero}")
             return JSONResponse({"ok": True})
-        logger.error(f"[API] Twilio fallo para {numero}")
-        return JSONResponse({"error": "twilio_error"}, status_code=500)
+        logger.error(f"[API] Twilio fallo para {numero}: {twilio_err}")
+        return JSONResponse({"error": "twilio_error", "detail": twilio_err}, status_code=500)
     except Exception as e:
         logger.error(f"[API] Error respondiendo: {e}", exc_info=True)
         return JSONResponse({"error": "server_error"}, status_code=500)

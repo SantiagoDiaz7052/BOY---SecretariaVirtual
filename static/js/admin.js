@@ -327,7 +327,7 @@ const AdminApp = {
           this._clearConvError();
           setTimeout(() => this.abrirConversacion(this.currentContextoId), 500);
         } else {
-          const msg = data.error === 'twilio_error' ? 'Error al enviar por WhatsApp. Verifica Twilio.' :
+          const msg = data.error === 'twilio_error' ? `Error Twilio: ${data.detail || 'desconocido'}` :
                       data.error === 'texto_requerido' ? 'Escribe un mensaje.' :
                       `Error: ${data.error || 'desconocido'}`;
           this._showConvError(msg);
