@@ -305,7 +305,7 @@ RESPUESTAS_HORARIO = {
         "• *Iniciación*: $99.999/mes, 4 veces por semana\n"
         "• *Intermedio*: $99.999/mes, 6 días por semana\n"
         "• *Avanzado*: $110.000/mes, 8 jornadas por semana\n\n"
-        "¿Cuál te gustaría ver en detalle? O si quieres, cuéntame la edad del patinador y te recomiendo el grupo ideal 😊"
+        "¿Cuál grupo te interesa conocer? 😊"
     ),
 }
 

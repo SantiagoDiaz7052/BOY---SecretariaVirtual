@@ -33,15 +33,19 @@ async def _enviar_whatsapp(numero, texto):
             return False
         url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
         data = {"From": f"whatsapp:{TWILIO_NUMBER}", "To": numero, "Body": texto}
-        async with httpx.AsyncClient() as client:
+        logger.info(f"[TWILIO] Enviando a {numero}")
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(url, data=data, auth=(TWILIO_SID, TWILIO_TOKEN))
             if resp.status_code == 201:
-                logger.info(f"[TWILIO] Mensaje enviado a {numero}")
+                logger.info(f"[TWILIO] Mensaje enviado OK a {numero}")
                 return True
-            logger.error(f"[TWILIO] Error {resp.status_code}: {resp.text}")
+            logger.error(f"[TWILIO] Error {resp.status_code}: {resp.text[:200]}")
             return False
+    except httpx.TimeoutException:
+        logger.error("[TWILIO] Timeout enviando mensaje")
+        return False
     except Exception as e:
-        logger.error(f"[TWILIO] Error enviando: {e}")
+        logger.error(f"[TWILIO] Error enviando: {e}", exc_info=True)
         return False
 
 def _saludo():
@@ -366,19 +370,26 @@ async def api_responder(request: Request, contexto_id: str):
         if not supabase:
             return JSONResponse({"error": "no_db"}, status_code=500)
         ctx_r = supabase.table("contextos_conversacionales") \
-            .select("numero_whatsapp") \
+            .select("numero_whatsapp,control") \
             .eq("id", contexto_id) \
             .limit(1) \
             .execute()
         if not ctx_r.data:
             return JSONResponse({"error": "not_found"}, status_code=404)
         numero = ctx_r.data[0]["numero_whatsapp"]
+        control = ctx_r.data[0].get("control", "boy")
+        if control != "ivonn":
+            logger.warning(f"[API] Intento de respuesta con control={control}: {contexto_id}")
+            return JSONResponse({"error": "no_tiene_control"}, status_code=403)
+        logger.info(f"[API] Enviando respuesta a {numero} ({contexto_id})")
         twilio_ok = await _enviar_whatsapp(numero, texto)
         if twilio_ok:
             from bot import _agregar_y_guardar
             _agregar_y_guardar(numero, "model", texto)
+            logger.info(f"[API] Respuesta enviada OK a {numero}")
             return JSONResponse({"ok": True})
+        logger.error(f"[API] Twilio fallo para {numero}")
         return JSONResponse({"error": "twilio_error"}, status_code=500)
     except Exception as e:
-        logger.error(f"[API] Error respondiendo: {e}")
+        logger.error(f"[API] Error respondiendo: {e}", exc_info=True)
         return JSONResponse({"error": "server_error"}, status_code=500)

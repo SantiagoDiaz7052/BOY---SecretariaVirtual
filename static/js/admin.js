@@ -255,50 +255,100 @@ const AdminApp = {
 
   tomarControl() {
     if (!this.currentContextoId) return;
+    const btn = document.getElementById('btnTomarControl');
+    if (btn) { btn.disabled = true; btn.textContent = 'Tomando...'; }
+
     fetch(`/admin/api/conversacion/${this.currentContextoId}/tomar-control`, { method: 'POST' })
-      .then(r => r.json())
-      .then(data => {
-        if (data.ok) {
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok && data.ok) {
           this.currentControl = 'ivonn';
+          this._clearConvError();
           this.abrirConversacion(this.currentContextoId);
+        } else {
+          this._showConvError(`Error al tomar control: ${data.error || 'desconocido'}`);
         }
       })
-      .catch(() => {});
+      .catch(err => {
+        this._showConvError('Error de conexión: ' + err.message);
+      })
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Tomar control'; }
+      });
   },
 
   devolverControl() {
     if (!this.currentContextoId) return;
+    const btn = document.getElementById('btnDevolverControl');
+    if (btn) { btn.disabled = true; btn.textContent = 'Devolviendo...'; }
+
     fetch(`/admin/api/conversacion/${this.currentContextoId}/devolver-control`, { method: 'POST' })
-      .then(r => r.json())
-      .then(data => {
-        if (data.ok) {
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok && data.ok) {
           this.currentControl = 'boy';
+          this._clearConvError();
           this.abrirConversacion(this.currentContextoId);
+        } else {
+          this._showConvError(`Error al devolver control: ${data.error || 'desconocido'}`);
         }
       })
-      .catch(() => {});
+      .catch(err => {
+        this._showConvError('Error de conexión: ' + err.message);
+      })
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Devolver a BOY'; }
+      });
   },
 
   responderMensaje() {
     if (!this.currentContextoId) return;
+    if (this.currentControl === 'boy') {
+      this._showConvError('Debes tomar el control primero');
+      return;
+    }
     const input = document.getElementById('convInput');
     if (!input) return;
     const texto = input.value.trim();
     if (!texto) return;
+
+    const btn = input.parentElement.querySelector('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
 
     fetch(`/admin/api/conversacion/${this.currentContextoId}/responder`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto })
     })
-      .then(r => r.json())
-      .then(data => {
-        if (data.ok) {
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok && data.ok) {
           input.value = '';
+          this._clearConvError();
           setTimeout(() => this.abrirConversacion(this.currentContextoId), 500);
+        } else {
+          const msg = data.error === 'twilio_error' ? 'Error al enviar por WhatsApp. Verifica Twilio.' :
+                      data.error === 'texto_requerido' ? 'Escribe un mensaje.' :
+                      `Error: ${data.error || 'desconocido'}`;
+          this._showConvError(msg);
         }
       })
-      .catch(() => {});
+      .catch(err => {
+        this._showConvError('Error de conexión: ' + err.message);
+      })
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Enviar'; }
+      });
+  },
+
+  _showConvError(msg) {
+    const el = document.getElementById('convError');
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+  },
+
+  _clearConvError() {
+    const el = document.getElementById('convError');
+    if (el) { el.style.display = 'none'; }
   },
 };
 
