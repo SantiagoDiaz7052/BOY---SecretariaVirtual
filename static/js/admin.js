@@ -104,7 +104,7 @@ const AdminApp = {
     this.loadNotifications();
     this.pollTimer = setInterval(() => {
       this.loadNotifications();
-    }, 10000);
+    }, 15000);
   },
 
   /* ─── BÚSQUEDA GLOBAL ─── */
@@ -226,7 +226,7 @@ const AdminApp = {
     this._convPollTimer = setInterval(() => {
       if (!this.currentContextoId) { this._stopConvPoll(); return; }
       this._refreshConversation();
-    }, 5000);
+    }, 10000);
   },
 
   _stopConvPoll() {
@@ -287,6 +287,24 @@ const AdminApp = {
     }
   },
 
+  _updateControlUI(control) {
+    this.currentControl = control;
+    const status = document.getElementById('convStatus');
+    const btnTomar = document.getElementById('btnTomarControl');
+    const btnDevolver = document.getElementById('btnDevolverControl');
+    if (status) {
+      const esBoy = control === 'boy';
+      status.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:500">
+        <span style="width:8px;height:8px;border-radius:50%;background:${esBoy ? '#22c55e' : '#a855f7'}"></span>
+        ${esBoy ? 'BOY activo' : 'Atención humana — Ivonn'}
+      </span>`;
+    }
+    if (btnTomar) btnTomar.style.display = control === 'boy' ? '' : 'none';
+    if (btnDevolver) btnDevolver.style.display = control === 'ivonn' ? '' : 'none';
+    const card = document.querySelector(`[data-control]`);
+    if (card) card.dataset.control = control;
+  },
+
   tomarControl() {
     if (!this.currentContextoId) return;
     const btn = document.getElementById('btnTomarControl');
@@ -296,9 +314,8 @@ const AdminApp = {
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (ok && data.ok) {
-          this.currentControl = 'ivonn';
           this._clearConvError();
-          this.abrirConversacion(this.currentContextoId);
+          this._updateControlUI('ivonn');
         } else {
           this._showConvError(`Error al tomar control: ${data.error || 'desconocido'}`);
         }
@@ -320,9 +337,8 @@ const AdminApp = {
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (ok && data.ok) {
-          this.currentControl = 'boy';
           this._clearConvError();
-          this.abrirConversacion(this.currentContextoId);
+          this._updateControlUI('boy');
         } else {
           this._showConvError(`Error al devolver control: ${data.error || 'desconocido'}`);
         }
