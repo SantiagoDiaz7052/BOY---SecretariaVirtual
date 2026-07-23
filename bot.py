@@ -348,19 +348,21 @@ async def webhook_whatsapp(request: Request):
         numero = form.get("From", "")
         texto = form.get("Body", "").strip()
 
-        logger.info(f"[WEBHOOK] De: {numero} | Msg: {texto[:50]}")
+        print(f"[WH-debug] De: {numero} | Msg: {texto[:50]}")
 
         control = _verificar_control(numero)
+        print(f"[WH-debug] Control: {control}")
         _agregar_y_guardar(numero, "user", texto)
 
         if control == "ivonn":
-            logger.info(f"[WEBHOOK] Control Ivonn, no se responde: {numero}")
+            print(f"[WH-debug] Control Ivonn, sin respuesta")
             return PlainTextResponse(
                 content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                 media_type="application/xml"
             )
 
         imagen, respuesta_clasif = clasificar_nivel(texto)
+        print(f"[WH-debug] Clasificar: imagen={imagen} resp={str(respuesta_clasif)[:60]}")
 
         if imagen:
             respuesta = respuesta_clasif
@@ -369,10 +371,12 @@ async def webhook_whatsapp(request: Request):
         else:
             historial = _obtener_historial(numero)
             respuesta = gemini_chat(historial, texto)
+            print(f"[WH-debug] Gemini resp: {str(respuesta)[:80]}")
 
         _agregar_y_guardar(numero, "model", respuesta)
 
     except Exception as e:
+        print(f"[WH-debug] ERROR: {e}")
         logger.error(f"[WEBHOOK] Error: {e}", exc_info=True)
         respuesta = "Ocurrió un error. Intenta de nuevo."
         imagen = None
