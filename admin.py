@@ -93,6 +93,7 @@ async def dashboard(request: Request):
                 .order("updated_at", desc=True) \
                 .limit(10) \
                 .execute()
+            logger.info(f"[DASHBOARD] contextos: {len(r.data) if r.data else 0}")
             if r.data:
                 stats["activos"] = len([c for c in r.data if c.get("estado") == "activa"])
                 for ctx in r.data:
@@ -115,6 +116,7 @@ async def dashboard(request: Request):
                                 ultimo_msg = user_msgs[-1].get("content", "")[:120]
                         except Exception:
                             pass
+                    logger.info(f"[DASHBOARD] ctx={numero} control={control} msg='{ultimo_msg[:40]}'")
                     if control == "ivonn" and ultimo_msg:
                         acciones.append({
                             "color": "#a855f7",
@@ -134,8 +136,9 @@ async def dashboard(request: Request):
                             "hora": fecha,
                             "texto": f"{icono} {numero} — {ultimo_msg[:80]}",
                         })
+            logger.info(f"[DASHBOARD] acciones={len(acciones)} timeline={len(timeline)}")
     except Exception as e:
-        logger.error(f"[DASHBOARD] Error: {e}")
+        logger.error(f"[DASHBOARD] Error: {e}", exc_info=True)
     return templates.TemplateResponse(request, "admin/dashboard.html", {
         "saludo": _saludo(),
         "nombre": request.session.get("nombre", "Ivonn"),
