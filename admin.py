@@ -1,6 +1,6 @@
 import logging, bcrypt, sys, fastapi, os, json
 import httpx
-from datetime import datetime
+from datetime import datetime as _dt
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -51,7 +51,7 @@ async def _enviar_whatsapp(numero, texto):
         return False, str(e)
 
 def _saludo():
-    h = datetime.now().hour
+    h = _dt.now().hour
     return "días" if h < 12 else "tardes" if h < 18 else "noches"
 
 login_router = APIRouter(tags=["auth"])
@@ -82,14 +82,68 @@ async def dashboard(request: Request):
     auth = _auth(request)
     if auth:
         return auth
+    acciones = []
+    timeline = []
+    stats = {"ingresos_hoy": "0", "activos": 0, "total_deportistas": 0, "vencidas": 0, "mora_acumulada": "0", "tasa_cobro": 0}
+    try:
+        from db import supabase
+        if supabase:
+            r = supabase.table("contextos_conversacionales") \
+                .select("id,numero_whatsapp,control,estado,updated_at") \
+                .order("updated_at", desc=True) \
+                .limit(10) \
+                .execute()
+            if r.data:
+                stats["activos"] = len([c for c in r.data if c.get("estado") == "activa"])
+                for ctx in r.data:
+                    if ctx.get("estado") != "activa":
+                        continue
+                    numero = ctx["numero_whatsapp"]
+                    control = ctx.get("control", "boy")
+                    updated = ctx.get("updated_at", "")
+                    conv_r = supabase.table("conversaciones") \
+                        .select("contenido") \
+                        .eq("numero", numero) \
+                        .limit(1) \
+                        .execute()
+                    ultimo_msg = ""
+                    if conv_r.data and conv_r.data[0].get("contenido"):
+                        try:
+                            msgs = json.loads(conv_r.data[0]["contenido"])
+                            user_msgs = [m for m in msgs if m.get("rol") == "user"]
+                            if user_msgs:
+                                ultimo_msg = user_msgs[-1].get("content", "")[:120]
+                        except Exception:
+                            pass
+                    if control == "ivonn" and ultimo_msg:
+                        acciones.append({
+                            "color": "#a855f7",
+                            "texto": ultimo_msg,
+                            "persona": numero,
+                            "contexto_id": ctx["id"],
+                        })
+                    if ultimo_msg:
+                        try:
+                            fecha = _dt.fromisoformat(updated.replace("Z", "+00:00")).strftime("%d/%m %H:%M")
+                        except Exception:
+                            fecha = updated[:16] if updated else ""
+                        dot = "success" if control == "boy" else "primary"
+                        icono = "🤖" if control == "boy" else "👩"
+                        timeline.append({
+                            "dot_class": dot,
+                            "hora": fecha,
+                            "texto": f"{icono} {numero} — {ultimo_msg[:80]}",
+                        })
+    except Exception as e:
+        logger.error(f"[DASHBOARD] Error: {e}")
     return templates.TemplateResponse(request, "admin/dashboard.html", {
         "saludo": _saludo(),
         "nombre": request.session.get("nombre", "Ivonn"),
         "ultima_sincronizacion": "ahora",
-        "resumen": [{"color": "green", "texto": "BOY activo y respondiendo"}],
-        "acciones": [],
-        "timeline": [],
-        "stats": {"ingresos_hoy": "0", "activos": 0, "total_deportistas": 0, "vencidas": 0, "mora_acumulada": "0", "tasa_cobro": 0},
+        "resumen": [{"color": "green", "texto": f"{stats['activos']} conversación(es) activa(s)"}],
+        "acciones": acciones,
+        "timeline": timeline,
+        "stats": stats,
     })
 
 @router.get("/bandeja", response_class=HTMLResponse)

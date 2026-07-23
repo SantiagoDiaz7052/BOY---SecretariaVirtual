@@ -301,8 +301,13 @@ const AdminApp = {
     }
     if (btnTomar) btnTomar.style.display = control === 'boy' ? '' : 'none';
     if (btnDevolver) btnDevolver.style.display = control === 'ivonn' ? '' : 'none';
-    const card = document.querySelector(`[data-control]`);
-    if (card) card.dataset.control = control;
+    document.querySelectorAll(`.action-card[onclick*="${this.currentContextoId}"]`).forEach(card => {
+      card.dataset.control = control;
+      const dot = card.querySelector('.ac-dot');
+      if (dot) dot.style.background = control === 'boy' ? '#22c55e' : '#a855f7';
+      const badge = card.querySelector('span[style*="font-size:.72rem"]');
+      if (badge) badge.textContent = control === 'boy' ? '🟢 BOY' : '🟣 Ivonn';
+    });
   },
 
   tomarControl() {

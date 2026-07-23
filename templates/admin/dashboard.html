@@ -25,11 +25,11 @@
       {% if acciones %}
       <div class="action-cards">
         {% for a in acciones %}
-        <div class="action-card" onclick="window.location.href='/admin/bandeja'">
+        <div class="action-card" onclick="window.location.href='/admin/bandeja?conversacion={{ a.contexto_id }}'" style="cursor:pointer">
           <span class="ac-dot" style="background:{{ a.color }}"></span>
           <div>
-            <div class="ac-text">{{ a.texto }}</div>
-            <div class="ac-person">{{ a.persona }}</div>
+            <div class="ac-text" style="font-weight:600;font-size:.82rem;color:var(--text-primary)">{{ a.persona }}</div>
+            <div class="ac-person" style="font-size:.8rem;color:var(--text-muted);margin-top:2px">{{ a.texto }}</div>
           </div>
           <span class="ac-arrow">→</span>
         </div>
@@ -49,15 +49,23 @@
   <div class="card">
     <div class="card-header"><h3>⏱ Actividad reciente</h3></div>
     <div class="card-body">
+      {% if timeline %}
       <div class="timeline">
         {% for t in timeline %}
         <div class="timeline-item">
           <div class="timeline-dot {{ t.dot_class }}"></div>
           <div class="timeline-time">{{ t.hora }}</div>
-          <div class="timeline-text">{{ t.icono }} {{ t.texto }}</div>
+          <div class="timeline-text">{{ t.texto }}</div>
         </div>
         {% endfor %}
       </div>
+      {% else %}
+      <div class="empty-state">
+        <span class="icon">📭</span>
+        <h4>Sin actividad</h4>
+        <p>No hay conversaciones recientes</p>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
