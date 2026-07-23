@@ -8,7 +8,7 @@ from bot import router as whatsapp_router
 
 app = FastAPI(title="BOY - Secretaria Virtual")
 
-app.add_middleware(SessionMiddleware, secret_key="d3f089a2c14b7e6f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1", max_age=7*24*3600)
+app.add_middleware(SessionMiddleware, secret_key="d3f089a2c14b7e6f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1", max_age=7*24*3600, same_site="lax", https_only=False)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

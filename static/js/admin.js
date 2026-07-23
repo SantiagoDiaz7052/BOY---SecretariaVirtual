@@ -58,7 +58,7 @@ const AdminApp = {
   },
 
   loadNotifications() {
-    fetch('/admin/api/notificaciones')
+    fetch('/admin/api/notificaciones', { credentials: 'same-origin' })
       .then(r => r.json())
       .then(data => {
         this.notifications = data;
@@ -133,7 +133,7 @@ const AdminApp = {
 
   doSearch(q) {
     const results = document.getElementById('searchResults');
-    fetch(`/admin/api/buscar?q=${encodeURIComponent(q)}`)
+    fetch(`/admin/api/buscar?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' })
       .then(r => r.json())
       .then(data => {
         if (data.length === 0) {
@@ -196,14 +196,15 @@ const AdminApp = {
     if (drawer) drawer.classList.add('open');
     if (overlay) overlay.classList.add('open');
 
-    fetch(`/admin/api/conversacion/${contextoId}`)
+    fetch(`/admin/api/conversacion/${contextoId}`, { credentials: 'same-origin' })
       .then(r => r.json())
       .then(data => {
         if (data.error) return;
         this.currentControl = data.control;
         this.renderConversation(data);
+        this._startConvPoll();
       })
-      .catch(() => {});
+      .catch(err => console.error('[CONV] Error cargando:', err));
   },
 
   cerrarConversacion() {
@@ -213,6 +214,39 @@ const AdminApp = {
     if (overlay) overlay.classList.remove('open');
     this.currentContextoId = null;
     this.currentControl = null;
+    this._stopConvPoll();
+  },
+
+  _convPollTimer: null,
+  _lastMsgCount: 0,
+
+  _startConvPoll() {
+    this._stopConvPoll();
+    this._lastMsgCount = document.querySelectorAll('#convMessages > div').length;
+    this._convPollTimer = setInterval(() => {
+      if (!this.currentContextoId) { this._stopConvPoll(); return; }
+      this._refreshConversation();
+    }, 5000);
+  },
+
+  _stopConvPoll() {
+    if (this._convPollTimer) { clearInterval(this._convPollTimer); this._convPollTimer = null; }
+  },
+
+  _refreshConversation() {
+    if (!this.currentContextoId) return;
+    fetch(`/admin/api/conversacion/${this.currentContextoId}`, { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return;
+        this.currentControl = data.control;
+        const newCount = data.mensajes ? data.mensajes.length : 0;
+        if (newCount !== this._lastMsgCount) {
+          this._lastMsgCount = newCount;
+          this.renderConversation(data);
+        }
+      })
+      .catch(() => {});
   },
 
   renderConversation(data) {
@@ -258,7 +292,7 @@ const AdminApp = {
     const btn = document.getElementById('btnTomarControl');
     if (btn) { btn.disabled = true; btn.textContent = 'Tomando...'; }
 
-    fetch(`/admin/api/conversacion/${this.currentContextoId}/tomar-control`, { method: 'POST' })
+    fetch(`/admin/api/conversacion/${this.currentContextoId}/tomar-control`, { method: 'POST', credentials: 'same-origin' })
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (ok && data.ok) {
@@ -282,7 +316,7 @@ const AdminApp = {
     const btn = document.getElementById('btnDevolverControl');
     if (btn) { btn.disabled = true; btn.textContent = 'Devolviendo...'; }
 
-    fetch(`/admin/api/conversacion/${this.currentContextoId}/devolver-control`, { method: 'POST' })
+    fetch(`/admin/api/conversacion/${this.currentContextoId}/devolver-control`, { method: 'POST', credentials: 'same-origin' })
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (ok && data.ok) {
@@ -318,6 +352,7 @@ const AdminApp = {
     fetch(`/admin/api/conversacion/${this.currentContextoId}/responder`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ texto })
     })
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
@@ -325,7 +360,14 @@ const AdminApp = {
         if (ok && data.ok) {
           input.value = '';
           this._clearConvError();
-          setTimeout(() => this.abrirConversacion(this.currentContextoId), 500);
+          const msgs = document.getElementById('convMessages');
+          if (msgs) {
+            msgs.innerHTML += `<div style="display:flex;justify-content:flex-end;margin:6px 0">
+              <div style="max-width:75%;padding:10px 14px;border-radius:12px;font-size:.85rem;background:#3b82f6;color:white">${texto}</div>
+            </div>`;
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+          setTimeout(() => this._refreshConversation(), 1000);
         } else {
           const msg = data.error === 'twilio_error' ? `Error Twilio: ${data.detail || 'desconocido'}` :
                       data.error === 'texto_requerido' ? 'Escribe un mensaje.' :
