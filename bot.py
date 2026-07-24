@@ -358,7 +358,7 @@ async def webhook_whatsapp(request: Request):
             print(f"[WH-debug] Control Ivonn, sin respuesta")
             return PlainTextResponse(
                 content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-                media_type="application/xml"
+                media_type="text/xml"
             )
 
         imagen, respuesta_clasif = clasificar_nivel(texto)
@@ -390,4 +390,5 @@ async def webhook_whatsapp(request: Request):
     else:
         twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{safe}</Message></Response>'
 
-    return PlainTextResponse(content=twiml, media_type="application/xml")
+    print(f"[WH-debug] TwiML length: {len(twiml)} | First 200: {twiml[:200]}")
+    return PlainTextResponse(content=twiml, media_type="text/xml")
