@@ -83,6 +83,7 @@ async def dashboard(request: Request):
     if auth:
         return auth
     acciones = []
+    acciones_ids = set()
     timeline = []
     stats = {"ingresos_hoy": "0", "activos": 0, "total_deportistas": 0, "vencidas": 0, "mora_acumulada": "0", "tasa_cobro": 0}
     try:
@@ -124,6 +125,7 @@ async def dashboard(request: Request):
                             "persona": numero,
                             "contexto_id": ctx["id"],
                         })
+                        acciones_ids.add(ctx["id"])
                     if ultimo_msg:
                         try:
                             fecha = _dt.fromisoformat(updated.replace("Z", "+00:00")).strftime("%d/%m %H:%M")
@@ -136,6 +138,38 @@ async def dashboard(request: Request):
                             "hora": fecha,
                             "texto": f"{icono} {numero} — {ultimo_msg[:80]}",
                         })
+
+            notif_r = supabase.table("notificaciones") \
+                .select("id,tipo,icono,texto,referencia_id,created_at") \
+                .eq("leida", False) \
+                .order("created_at", desc=True) \
+                .limit(20) \
+                .execute()
+            if notif_r.data:
+                NOTIF_COLORS = {
+                    "interes": "#f97316",
+                    "inscripcion": "#3b82f6",
+                    "atencion_humana": "#a855f7",
+                    "comprobante_pago": "#22c55e",
+                }
+                for n in notif_r.data:
+                    ref_id = n.get("referencia_id")
+                    if not ref_id or ref_id in acciones_ids:
+                        continue
+                    ctx_r = supabase.table("contextos_conversacionales") \
+                        .select("numero_whatsapp") \
+                        .eq("id", ref_id) \
+                        .limit(1) \
+                        .execute()
+                    numero = ctx_r.data[0]["numero_whatsapp"] if ctx_r.data else "Desconocido"
+                    acciones.append({
+                        "color": NOTIF_COLORS.get(n.get("tipo"), "#f59e0b"),
+                        "texto": n["texto"],
+                        "persona": numero,
+                        "contexto_id": ref_id,
+                    })
+                    acciones_ids.add(ref_id)
+
             logger.info(f"[DASHBOARD] acciones={len(acciones)} timeline={len(timeline)}")
     except Exception as e:
         logger.error(f"[DASHBOARD] Error: {e}", exc_info=True)
