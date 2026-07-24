@@ -188,7 +188,7 @@ def _verificar_control(numero):
     try:
         from db import supabase
         if not supabase:
-            return "boy"
+            return "boy", None
         r = supabase.table("contextos_conversacionales") \
             .select("id,control") \
             .eq("numero_whatsapp", numero) \
@@ -196,22 +196,96 @@ def _verificar_control(numero):
             .limit(1) \
             .execute()
         if r.data and len(r.data) > 0:
-            return r.data[0].get("control", "boy")
+            return r.data[0].get("control", "boy"), r.data[0]["id"]
         club_r = supabase.table("clubs").select("id").eq("activo", True).limit(1).execute()
         if not club_r.data or len(club_r.data) == 0:
             logger.warning(f"[CONTROL] No hay club activo: {numero}")
-            return "boy"
+            return "boy", None
         club_id = club_r.data[0]["id"]
-        supabase.table("contextos_conversacionales").insert({
+        result = supabase.table("contextos_conversacionales").insert({
             "club_id": club_id,
             "numero_whatsapp": numero,
             "estado": "activa",
             "control": "boy"
-        }).execute()
-        return "boy"
+        }).select("id").execute()
+        contexto_id = result.data[0]["id"] if result.data else None
+        return "boy", contexto_id
     except Exception as e:
         logger.warning(f"[CONTROL] Error: {e}")
-        return "boy"
+        return "boy", None
+
+# ──────────────────────────────
+# DETECCIÓN DE SITUACIONES
+# ──────────────────────────────
+
+SITUACION_PROMPT = """Eres un clasificador de situaciones para una secretaria de club de patinaje.
+Analiza el mensaje del usuario y responde SOLO con una de estas opciones exactas:
+
+visita → quiere ir al club, visitar, conocer, pasar hoy/esta noche, llevar a su hijo
+inscripcion → quiere inscribirse, registrar, matricular, iniciar proceso
+atencion_humana → quiere hablar con persona, secretaria, necesita ayuda humana
+pago → envió comprobante, reporta pago, transferencia, factura, recibo
+ninguna → pregunta normal sobre precios, horarios, grupos, información general"""
+
+SITUACIONES = {
+    "visita":         {"tipo": "interes",          "icono": "📍", "texto": "El padre muestra interés en visitar el club"},
+    "inscripcion":    {"tipo": "inscripcion",       "icono": "📝", "texto": "El padre quiere iniciar el proceso de inscripción"},
+    "atencion_humana":{"tipo": "atencion_humana",   "icono": "👤", "texto": "El padre solicita atención humana"},
+    "pago":           {"tipo": "comprobante_pago",  "icono": "💰", "texto": "El padre envió un comprobante o reporta un pago"},
+}
+
+TRIGGERS_DETECCION = [
+    "ir", "visitar", "conocer", "pasar", "llevar", "hoy", "noche", "mañana",
+    "inscribir", "inscripción", "registrar", "matricular",
+    "hablar", "secretaria", "persona", "atender", "ayuda",
+    "comprobante", "pagué", "transferí", "factura", "recibo",
+]
+
+def _tiene_trigger(texto):
+    t = texto.lower()
+    return any(trig in t for trig in TRIGGERS_DETECCION)
+
+def _clasificar_situacion(texto):
+    try:
+        resp = _cliente().models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=texto,
+            config=types.GenerateContentConfig(
+                system_instruction=SITUACION_PROMPT,
+                max_output_tokens=15,
+                temperature=0.0,
+            ),
+        )
+        resultado = (resp.text or "").strip().lower()
+        logger.info(f"[SITUACION] '{texto[:40]}' → {resultado}")
+        return SITUACIONES.get(resultado)
+    except Exception as e:
+        logger.warning(f"[SITUACION] Error: {e}")
+        return None
+
+def _crear_notificacion(tipo, texto, contexto_id, icono="🔔"):
+    try:
+        from db import supabase
+        if not supabase or not contexto_id:
+            return
+        r = supabase.table("notificaciones") \
+            .select("id") \
+            .eq("tipo", tipo) \
+            .eq("referencia_id", contexto_id) \
+            .eq("leida", False) \
+            .limit(1) \
+            .execute()
+        if r.data and len(r.data) > 0:
+            return
+        supabase.table("notificaciones").insert({
+            "tipo": tipo,
+            "icono": icono,
+            "texto": texto,
+            "referencia_id": contexto_id,
+        }).execute()
+        logger.info(f"[NOTIF] Creada: {tipo} para {contexto_id}")
+    except Exception as e:
+        logger.warning(f"[NOTIF] Error creando: {e}")
 
 # ──────────────────────────────
 # CHAT
@@ -350,7 +424,7 @@ async def webhook_whatsapp(request: Request):
 
         print(f"[WH-debug] De: {numero} | Msg: {texto[:50]}")
 
-        control = _verificar_control(numero)
+        control, contexto_id = _verificar_control(numero)
         print(f"[WH-debug] Control: {control}")
         _agregar_y_guardar(numero, "user", texto)
 
@@ -360,6 +434,11 @@ async def webhook_whatsapp(request: Request):
                 content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                 media_type="text/xml"
             )
+
+        if control == "boy" and _tiene_trigger(texto):
+            sit = _clasificar_situacion(texto)
+            if sit:
+                _crear_notificacion(sit["tipo"], sit["texto"], contexto_id, sit["icono"])
 
         imagen, respuesta_clasif = clasificar_nivel(texto)
         print(f"[WH-debug] Clasificar: imagen={imagen} resp={str(respuesta_clasif)[:60]}")
